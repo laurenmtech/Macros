@@ -173,16 +173,27 @@ function searchTerms(q) {
   return q.toLowerCase().split(/[\s,]+/).filter(Boolean).map((t) => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t));
 }
 
+// Rank so "egg" finds "Egg, whole" before "Eggplant", and plain everyday foods beat
+// baby food, restaurant items and long, specific variants.
 function scoreName(lc, terms) {
   let sc = 0;
   for (const t of terms) {
-    const i = lc.indexOf(t);
-    if (i < 0) return -1;
-    sc += i === 0 ? 6 : /[\s,(]/.test(lc[i - 1]) ? 3 : 0;
+    const re = new RegExp(`(^|[^a-z])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(e?s)?(?![a-z])`);
+    if (re.test(lc)) sc += 5; // whole word (plural ok)
+    else {
+      const i = lc.indexOf(t);
+      if (i < 0) return -1;
+      sc += i === 0 || /[^a-z]/.test(lc[i - 1]) ? 1 : 0;
+    }
   }
-  if (lc.split(',')[0].includes(terms[0])) sc += 3;
-  if (/\braw\b/.test(lc)) sc += 0.5;
-  return sc - lc.length / 40;
+  const head = lc.split(',')[0].trim();
+  const words = head.split(/\s+/);
+  const is = (w, t) => w === t || w === t + 's' || w === t + 'es';
+  if (words.some((w) => is(w, terms[0]))) sc += 4;
+  if (words.length === 1 && terms.some((t) => is(words[0], t))) sc += 2;
+  sc += (lc.match(/\b(raw|whole|fresh|cooked|plain|all commercial varieties|fluid|meat only)\b/g) || []).length * 0.8;
+  if (/baby food|infant|toddler|school lunch|restaurant|fast foods?|^[a-z' ]+'s,/.test(lc)) sc -= 4;
+  return sc - (lc.split(',').length - 1) * 0.35 - lc.length / 80;
 }
 
 async function searchLocal(q) {
