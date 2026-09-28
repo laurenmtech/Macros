@@ -239,6 +239,11 @@ main {
 .field > span { font-size: 13px; color: var(--ink-2); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid2 .field, .grid4 .field { margin: 6px 0; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.grid3 .field { margin: 12px 0 6px; }
+.goal-total { display: flex; justify-content: space-between; align-items: baseline; margin: 10px 0 12px; }
+.goal-total span { color: var(--ink-2); font-size: 13px; }
+.goal-total b { font-size: 26px; font-weight: 650; }
 .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .amount-row { display: grid; grid-template-columns: 96px 1fr; gap: 8px; }
 .nutri { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0; text-align: center; }

@@ -993,13 +993,13 @@ function renderSettings() {
     ${standalone ? '' : `<div class="hint"><b>Install:</b> on iPhone, tap Share → <b>Add to Home Screen</b>. On Android, open the ⋮ menu → <b>Add to Home screen</b>.</div>`}
     <section class="card card-pad">
       <h2>Daily goals</h2>
-      <label class="field"><span>Calories</span><input id="g-kcal" inputmode="numeric" value="${G.kcal}"></label>
-      ${MACROS.map(([k, name, color]) => `
-        <div class="grid2" style="align-items:end">
-          <label class="field"><span><span class="swatch" style="--c: var(${color})"></span>${name} (g)</span><input id="g-${k}" inputmode="decimal" value="${G[k]}"></label>
-          <label class="field"><span>% of calories</span><input id="g-${k}-pct" inputmode="decimal"></label>
-        </div>`).join('')}
-      <p class="small" id="g-check"></p>
+      <p class="muted small" style="margin:6px 0 0">Enter your macros in grams. Calories are worked out from them: 4 per gram of protein or carbs, 9 per gram of fat.</p>
+      <div class="grid3">
+        ${MACROS.map(([k, name, color]) => `
+          <label class="field"><span><span class="swatch" style="--c: var(${color})"></span>${name} (g)</span><input id="g-${k}" inputmode="decimal" value="${G[k]}"><small class="muted" id="g-${k}-pct"></small></label>`).join('')}
+      </div>
+      <div class="goal-total"><span>Daily calories</span><b id="g-kcal"></b></div>
+      <div class="split" id="g-split"></div>
       <button class="btn primary block" id="g-save">Save goals</button>
     </section>
 
@@ -1023,38 +1023,18 @@ function renderSettings() {
   const inp = (id) => $(id, view);
   const read = (id) => { const v = parseQty(inp(id).value); return Number.isFinite(v) && v >= 0 ? v : 0; };
 
-  function syncPct() {
-    const kcal = read('#g-kcal');
-    for (const [k, , , m] of MACROS) inp(`#g-${k}-pct`).value = kcal ? Math.round((read(`#g-${k}`) * m / kcal) * 100) : '';
-    check();
+  const kcalFromMacros = () => Math.round(MACROS.reduce((a, [k, , , m]) => a + read(`#g-${k}`) * m, 0));
+  function update() {
+    const kcal = kcalFromMacros();
+    inp('#g-kcal').textContent = `${kc(kcal)} kcal`;
+    inp('#g-split').innerHTML = MACROS.map(([k, , color, m]) => `<i style="--c: var(${color}); flex: ${read(`#g-${k}`) * m}"></i>`).join('');
+    for (const [k, , , m] of MACROS) inp(`#g-${k}-pct`).textContent = kcal ? `${Math.round((read(`#g-${k}`) * m / kcal) * 100)}% of calories` : '';
   }
-  function check() {
-    const kcal = read('#g-kcal');
-    const fromMacros = MACROS.reduce((a, [k, , , m]) => a + read(`#g-${k}`) * m, 0);
-    const pct = MACROS.reduce((a, [k]) => a + read(`#g-${k}-pct`), 0);
-    const off = Math.abs(fromMacros - kcal) > 50;
-    inp('#g-check').innerHTML = `Macros add up to <b>${kc(fromMacros)} kcal</b> (${Math.round(pct)}%).` +
-      (off ? ` <span style="color:var(--over)">▲ That is ${kc(Math.abs(fromMacros - kcal))} ${fromMacros > kcal ? 'more' : 'less'} than your calorie goal.</span>` : '');
-  }
-  inp('#g-kcal').addEventListener('input', () => {
-    // Keep the % split and rescale grams to the new calorie goal.
-    const kcal = read('#g-kcal');
-    for (const [k, , , m] of MACROS) {
-      const pct = read(`#g-${k}-pct`);
-      if (pct) inp(`#g-${k}`).value = Math.round((kcal * pct) / 100 / m);
-    }
-    check();
-  });
-  for (const [k, , , m] of MACROS) {
-    inp(`#g-${k}`).addEventListener('input', syncPct);
-    inp(`#g-${k}-pct`).addEventListener('input', () => {
-      inp(`#g-${k}`).value = Math.round((read('#g-kcal') * read(`#g-${k}-pct`)) / 100 / m);
-      check();
-    });
-  }
+  for (const [k] of MACROS) inp(`#g-${k}`).addEventListener('input', update);
+  update();
   inp('#g-save').onclick = () => {
-    const kcal = read('#g-kcal');
-    if (!kcal) return toast('Enter a calorie goal.');
+    const kcal = kcalFromMacros();
+    if (!kcal) return toast('Enter your macro goals.');
     db.goals = { kcal, p: read('#g-p'), c: read('#g-c'), f: read('#g-f') };
     save();
     toast('Goals saved');
