@@ -19,7 +19,7 @@ const USDA_API = 'https://api.nal.usda.gov/fdc/v1/foods/search';
 // ---------------------------------------------------------------- storage
 
 const defaults = () => ({
-  goals: { kcal: 2000, p: 150, c: 200, f: 67 },
+  goals: { kcal: 2000, p: 150, c: 200, f: 67, fib: 0 }, // fib 0 = no fiber goal
   usdaKey: '',
   log: {}, // { 'YYYY-MM-DD': [entry] }
   myFoods: [], // saved + custom foods
@@ -400,6 +400,19 @@ function macroMeter(k, name, color, eaten, goal) {
     </div>`;
 }
 
+// Fiber is a minimum, so going past the goal is good, not "over".
+function fiberMeter(eaten, goal) {
+  const pct = Math.min(100, (eaten / goal) * 100);
+  const left = goal - eaten;
+  return `
+    <div class="macro fiber" style="--c: var(--fiber)">
+      <div class="name">Fiber</div>
+      <div class="val">${gr(eaten)} <small>/ ${gr(goal)} g</small></div>
+      <div class="meter" role="meter" aria-label="Fiber" aria-valuemin="0" aria-valuemax="${goal}" aria-valuenow="${Math.round(eaten)}"><i style="width:${pct}%"></i></div>
+      <div class="left ${left <= 0 ? 'met' : ''}">${left <= 0 ? '✓ Goal met' : `${gr(left)} g to go`}</div>
+    </div>`;
+}
+
 function renderDiary() {
   const key = dkey(viewDate);
   const entries = db.log[key] || [];
@@ -419,7 +432,7 @@ function renderDiary() {
         <div class="remaining ${rem < 0 ? 'over' : ''}"><div class="num">${kc(Math.abs(rem))}</div><div class="lbl">${rem < 0 ? '▲ Over' : 'Remaining'}</div></div>
       </div>
       <div class="meter cal" role="meter" aria-label="Calories" aria-valuemin="0" aria-valuemax="${G.kcal}" aria-valuenow="${Math.round(t.kcal)}"><i style="width:${Math.min(100, (t.kcal / G.kcal) * 100 || 0)}%"></i></div>
-      <div class="macros">${MACROS.map(([k, name, color]) => macroMeter(k, name, color, t[k], G[k])).join('')}</div>
+      <div class="macros">${MACROS.map(([k, name, color]) => macroMeter(k, name, color, t[k], G[k])).join('')}${G.fib ? fiberMeter(t.fib, G.fib) : ''}</div>
     </section>`;
 
   for (const meal of MEALS) {
@@ -449,7 +462,7 @@ function renderDiary() {
         </div>
       </section>`;
   }
-  if (t.fib) html += `<p class="muted small" style="text-align:center">Fiber ${gr(t.fib)} g</p>`;
+  if (t.fib && !G.fib) html += `<p class="muted small" style="text-align:center">Fiber ${gr(t.fib)} g</p>`;
 
   const view = $('#view');
   view.innerHTML = html;
@@ -919,7 +932,7 @@ function renderTrends() {
   const G = db.goals;
   const max = Math.max(G.kcal, ...days.map((x) => x.t.kcal)) * 1.1;
   const logged = days.filter((x) => x.logged);
-  const avg = { kcal: 0, p: 0, c: 0, f: 0 };
+  const avg = { kcal: 0, p: 0, c: 0, f: 0, fib: 0 };
   for (const x of logged) for (const k in avg) avg[k] += x.t[k] / logged.length;
 
   const label = (x, i) => trendRange === 7
@@ -954,6 +967,7 @@ function renderTrends() {
         <tbody>
           <tr><td>Calories</td><td>${kc(avg.kcal)}</td><td>${kc(G.kcal)}</td><td>${diff(avg.kcal - G.kcal, '')}</td></tr>
           ${MACROS.map(([k, name, color]) => `<tr><td><span class="swatch" style="--c: var(${color})"></span>${name}</td><td>${gr(avg[k])} g</td><td>${gr(G[k])} g</td><td>${diff(avg[k] - G[k], ' g')}</td></tr>`).join('')}
+          ${G.fib ? `<tr><td><span class="swatch" style="--c: var(--fiber)"></span>Fiber</td><td>${gr(avg.fib)} g</td><td>${gr(G.fib)} g</td><td>${avg.fib >= G.fib ? '<span class="muted">✓ met</span>' : `▼ ${gr(G.fib - avg.fib)} g under`}</td></tr>` : ''}
         </tbody>
       </table>` : ''}
     </section>`;
@@ -1000,6 +1014,7 @@ function renderSettings() {
       </div>
       <div class="goal-total"><span>Daily calories</span><b id="g-kcal"></b></div>
       <div class="split" id="g-split"></div>
+      <label class="field"><span><span class="swatch" style="--c: var(--fiber)"></span>Fiber (g) <span class="muted">· optional</span></span><input id="g-fib" inputmode="decimal" value="${G.fib || ''}" placeholder="No fiber goal"><small class="muted">A minimum to reach. It doesn't change your calories, since fiber is already part of carbs.</small></label>
       <button class="btn primary block" id="g-save">Save goals</button>
     </section>
 
@@ -1035,7 +1050,7 @@ function renderSettings() {
   inp('#g-save').onclick = () => {
     const kcal = kcalFromMacros();
     if (!kcal) return toast('Enter your macro goals.');
-    db.goals = { kcal, p: read('#g-p'), c: read('#g-c'), f: read('#g-f') };
+    db.goals = { kcal, p: read('#g-p'), c: read('#g-c'), f: read('#g-f'), fib: read('#g-fib') };
     save();
     toast('Goals saved');
   };
@@ -1069,7 +1084,6 @@ function renderSettings() {
       toast('That file is not a Macros backup.');
     }
   };
-  syncPct();
 }
 
 // ---------------------------------------------------------------- boot
