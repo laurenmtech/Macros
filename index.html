@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Macros</title>
+  <meta name="description" content="Track calories, protein, carbs and fat.">
+  <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Macros">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="icon-btn" id="prev-day" aria-label="Previous day">‹</button>
+    <button class="date-label" id="date-label" aria-label="Jump to today"></button>
+    <button class="icon-btn" id="next-day" aria-label="Next day">›</button>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabbar" aria-label="Sections">
+    <button data-tab="diary" class="active"><span aria-hidden="true">▤</span>Diary</button>
+    <button data-tab="trends"><span aria-hidden="true">▥</span>Trends</button>
+    <button data-tab="foods"><span aria-hidden="true">★</span>My foods</button>
+    <button data-tab="settings"><span aria-hidden="true">⚙</span>Goals</button>
+  </nav>
+
+  <div id="sheets"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>
