@@ -146,7 +146,7 @@ function openSheet({ title, body, short = false, onMount, onClose }) {
 // ---------------------------------------------------------------- food sources
 
 // Foods are { key, name, brand, src, n: nutrients per 1 base unit, units: [{label, mult}], def: {unit, qty} }.
-// For gram-based foods the base unit is 1 g; for custom foods it is 1 serving.
+// For gram-based foods the base unit is 1 g; for custom foods it is 1 serving; for recipes it is the whole batch.
 
 const gramUnits = [{ label: 'g', mult: 1 }, { label: 'oz', mult: 28.3495 }];
 const per100 = (o) => Object.fromEntries(NUTRIENTS.map((k) => [k, (o[k] || 0) / 100]));
@@ -334,6 +334,21 @@ function toggleSaved(food) {
   save();
 }
 
+// Create or update a custom food or recipe in My foods.
+function putMyFood(next) {
+  const i = db.myFoods.findIndex((f) => f.key === next.key);
+  if (i >= 0) db.myFoods[i] = next;
+  else db.myFoods.unshift(next);
+  db.recents = db.recents.map((f) => (f.key === next.key ? next : f));
+  save();
+}
+
+function deleteMyFood(key) {
+  db.myFoods = db.myFoods.filter((f) => f.key !== key);
+  db.recents = db.recents.filter((f) => f.key !== key);
+  save();
+}
+
 // ---------------------------------------------------------------- app shell
 
 let viewDate = noon();
@@ -505,21 +520,22 @@ function foodRow(f, i) {
     </button>`;
 }
 
-function openAddSheet(meal) {
+// With onIngredient, the sheet picks a recipe ingredient instead of logging to a meal.
+function openAddSheet(meal, onIngredient) {
   let mode = 'recent';
   let results = [];
   let q = '';
   let seq = 0;
 
   const sheet = openSheet({
-    title: `Add to ${meal}`,
+    title: onIngredient ? 'Add ingredient' : `Add to ${meal}`,
     body: `
       <form class="search" id="search-form" autocomplete="off">
         <input type="search" id="q" placeholder="Search foods" enterkeyhint="search" aria-label="Search foods">
       </form>
-      <div class="quick-row">
+      <div class="quick-row" ${onIngredient ? 'style="grid-template-columns:repeat(2, 1fr)"' : ''}>
         <button class="btn" id="scan"><span aria-hidden="true">▦</span>Scan</button>
-        <button class="btn" id="quick"><span aria-hidden="true">⚡</span>Quick add</button>
+        ${onIngredient ? '' : '<button class="btn" id="quick"><span aria-hidden="true">⚡</span>Quick add</button>'}
         <button class="btn" id="create"><span aria-hidden="true">✚</span>Create food</button>
       </div>
       <div class="seg" id="seg">
@@ -532,7 +548,9 @@ function openAddSheet(meal) {
   const input = $('#q', body);
   const out = $('#results', body);
 
-  const pick = (food) => openFoodSheet({ food, meal, onAdded: sheet.close });
+  const pick = (food) => openFoodSheet(onIngredient
+    ? { food, ingredient: { onSave: (amt) => { onIngredient(food, amt); sheet.close(); } } }
+    : { food, meal, onAdded: sheet.close });
 
   function show(list, extra = '') {
     results = list;
@@ -540,8 +558,13 @@ function openAddSheet(meal) {
     $$('[data-i]', out).forEach((b) => (b.onclick = (ev) => {
       const f = results[+b.dataset.i];
       if (ev.target.closest('[data-quick]')) {
-        const { key, entry } = addEntry(f, { meal, qty: f.def.qty, unit: f.def.unit });
-        toast(`Added ${f.name}`, { label: 'Undo', run: () => removeEntrySilently(key, entry.id) });
+        if (onIngredient) {
+          onIngredient(f, { qty: f.def.qty, unit: f.def.unit });
+          toast(`Added ${f.name}`);
+        } else {
+          const { key, entry } = addEntry(f, { meal, qty: f.def.qty, unit: f.def.unit });
+          toast(`Added ${f.name}`, { label: 'Undo', run: () => removeEntrySilently(key, entry.id) });
+        }
         b.querySelector('.add').textContent = '✓';
       } else pick(f);
     }));
@@ -604,7 +627,7 @@ function openAddSheet(meal) {
     if (food) pick(food);
     else openCreateFood({ barcode: code, meal, onSaved: (f) => pick(f), notFound: true });
   });
-  $('#quick', body).onclick = () => openQuickAdd(meal, sheet.close);
+  $('#quick', body)?.addEventListener('click', () => openQuickAdd(meal, sheet.close));
   $('#create', body).onclick = () => openCreateFood({ meal, onSaved: (f) => { if (mode === 'mine' && !q) showTab(); pick(f); } });
 
   showTab();
@@ -620,14 +643,15 @@ function removeEntrySilently(dateKey, id) {
 
 // ---------------------------------------------------------------- food detail
 
-function openFoodSheet({ food, meal, entry, dateKey, onAdded }) {
+// With ingredient: { onSave, onRemove }, the sheet sets a recipe ingredient's amount instead of logging.
+function openFoodSheet({ food, meal, entry, dateKey, onAdded, ingredient }) {
   let unit = entry ? entry.unit : food.def?.unit ?? 0;
   let qty = entry ? entry.qty : food.def?.qty ?? 1;
   let selMeal = meal;
-  const canSave = food.src !== 'Quick' && food.key;
+  const canSave = !ingredient && food.src !== 'Quick' && food.key;
 
   const sheet = openSheet({
-    title: entry ? 'Edit entry' : 'Add food',
+    title: ingredient ? (entry ? 'Edit ingredient' : 'Add ingredient') : entry ? 'Edit entry' : 'Add food',
     body: `
       <div class="food-title">${esc(food.name)}</div>
       <div class="muted small">${esc([food.brand, food.src].filter(Boolean).join(' · '))}</div>
@@ -640,15 +664,16 @@ function openFoodSheet({ food, meal, entry, dateKey, onAdded }) {
       </div>
       <div class="nutri" id="nutri"></div>
       <div class="split" id="split" aria-hidden="true"></div>
+      ${ingredient ? '' : `
       <div class="field">
         <span>Meal</span>
         <div class="meal-pick">${MEALS.map((m) => `<button data-meal="${m}" class="${m === selMeal ? 'active' : ''}">${m}</button>`).join('')}</div>
-      </div>
+      </div>`}
       <div class="btn-row" style="margin-top:20px">
         ${canSave ? `<button class="btn" id="star">${isSaved(food.key) ? '★ Saved' : '☆ Save'}</button>` : ''}
-        <button class="btn primary" id="go">${entry ? 'Save' : 'Add'}</button>
+        <button class="btn primary" id="go">${entry ? 'Save' : ingredient ? 'Add to recipe' : 'Add'}</button>
       </div>
-      ${entry ? '<button class="btn danger block" id="del" style="margin-top:8px">Delete entry</button>' : ''}`,
+      ${entry ? `<button class="btn danger block" id="del" style="margin-top:8px">${ingredient ? 'Remove ingredient' : 'Delete entry'}</button>` : ''}`,
   });
   const b = sheet.body;
 
@@ -689,7 +714,10 @@ function openFoodSheet({ food, meal, entry, dateKey, onAdded }) {
     if (tab === 'foods') render();
   });
   $('#go', b).onclick = () => {
-    if (entry) {
+    if (ingredient) {
+      sheet.close();
+      ingredient.onSave({ qty, unit });
+    } else if (entry) {
       Object.assign(entry, { qty, unit, meal: selMeal });
       save();
       render();
@@ -701,7 +729,11 @@ function openFoodSheet({ food, meal, entry, dateKey, onAdded }) {
       onAdded?.();
     }
   };
-  $('#del', b)?.addEventListener('click', () => { sheet.close(); removeEntry(dateKey, entry.id); });
+  $('#del', b)?.addEventListener('click', () => {
+    sheet.close();
+    if (ingredient) ingredient.onRemove();
+    else removeEntry(dateKey, entry.id);
+  });
   update();
 }
 
@@ -780,11 +812,7 @@ function openCreateFood({ food, barcode, onSaved, notFound } = {}) {
       n, units, def: { unit: 0, qty: 1 }, serving: { label, grams: grams || undefined },
       barcode: $('#cf-barcode', b).value.trim() || undefined,
     };
-    const i = db.myFoods.findIndex((f) => f.key === next.key);
-    if (i >= 0) db.myFoods[i] = next;
-    else db.myFoods.unshift(next);
-    db.recents = db.recents.map((f) => (f.key === next.key ? next : f));
-    save();
+    putMyFood(next);
     sheet.close();
     render();
     toast(food ? 'Food updated' : 'Food saved to My foods');
@@ -792,12 +820,140 @@ function openCreateFood({ food, barcode, onSaved, notFound } = {}) {
   };
   $('#cf-del', b)?.addEventListener('click', () => {
     if (!confirm(`Delete “${food.name}” from My foods? Past diary entries are kept.`)) return;
-    db.myFoods = db.myFoods.filter((f) => f.key !== food.key);
-    db.recents = db.recents.filter((f) => f.key !== food.key);
-    save();
+    deleteMyFood(food.key);
     sheet.close();
     render();
   });
+}
+
+// ---------------------------------------------------------------- recipes
+
+// A recipe is a custom food built from ingredients. Its nutrients are for the whole batch, so it
+// can be logged by the piece ("1 egg cup") and, when the batch weight is known, by the gram.
+
+// Weight in grams of an ingredient, or null if the food has no gram unit.
+function gramsOf(item) {
+  const g = item.units.find((u) => u.label === 'g');
+  return g ? (item.qty * (item.units[item.unit]?.mult ?? 1)) / g.mult : null;
+}
+
+function batchGrams(items) {
+  let sum = 0;
+  for (const it of items) {
+    const g = gramsOf(it);
+    if (g == null) return null;
+    sum += g;
+  }
+  return sum || null;
+}
+
+function recipeFood({ key, name, items, servings, servingName, grams }) {
+  const weight = grams || batchGrams(items);
+  const each = servingName || 'serving';
+  const units = [];
+  if (servings) units.push({ label: /^\d/.test(each) ? each : `1 ${each}`, mult: 1 / servings });
+  if (weight) units.push({ label: 'g', mult: 1 / weight }, { label: 'oz', mult: 28.3495 / weight });
+  units.push({ label: '1 batch', mult: 1 });
+  return {
+    key: key || 'my:' + uid(), name, brand: '', src: 'Recipe', custom: true,
+    n: sumAll(items), units, def: { unit: 0, qty: !servings && weight ? 100 : 1 },
+    recipe: { items, servings: servings || undefined, servingName, grams: grams || undefined },
+  };
+}
+
+function openRecipe({ food } = {}) {
+  const r = food?.recipe || {};
+  const items = (r.items || []).map((it) => ({ ...it }));
+  const sheet = openSheet({
+    title: food ? 'Edit recipe' : 'Create recipe',
+    body: `
+      <label class="field"><span>Name</span><input id="rc-name" value="${esc(food?.name)}" placeholder="e.g. Chicken soup"></label>
+      <div class="section-label">Ingredients</div>
+      <div class="list" id="rc-items"></div>
+      <button class="btn block" id="rc-add" style="margin-top:12px">✚ Add ingredient</button>
+      <div class="section-label">Batch size</div>
+      <div class="grid2">
+        <label class="field"><span>Makes (optional)</span><input id="rc-servings" inputmode="decimal" value="${r.servings || ''}" placeholder="e.g. 12"></label>
+        <label class="field"><span>Each one is called</span><input id="rc-serving" value="${esc(r.servingName)}" placeholder="e.g. egg cup" autocapitalize="off"></label>
+      </div>
+      <label class="field"><span>Cooked weight g (optional)</span><input id="rc-grams" inputmode="decimal" value="${r.grams || ''}"><small class="muted" id="rc-grams-hint"></small></label>
+      <div class="hint" id="rc-summary"></div>
+      <button class="btn primary block" id="rc-go" style="margin-top:12px">${food ? 'Save changes' : 'Save recipe'}</button>
+      ${food ? '<button class="btn danger block" id="rc-del" style="margin-top:8px">Delete recipe</button>' : ''}`,
+  });
+  const b = sheet.body;
+
+  const read = () => {
+    const num = (id) => { const v = parseQty($(id, b).value); return Number.isFinite(v) && v > 0 ? v : 0; };
+    return recipeFood({
+      key: food?.key, name: $('#rc-name', b).value.trim(), items,
+      servings: num('#rc-servings'), servingName: $('#rc-serving', b).value.trim(), grams: num('#rc-grams'),
+    });
+  };
+
+  function summary() {
+    const f = read();
+    const sum = batchGrams(items);
+    $('#rc-grams', b).placeholder = sum ? Math.round(sum) : '';
+    $('#rc-grams-hint', b).textContent = sum
+      ? `Leave blank to use the ingredients' total (${kc(sum)} g). Weigh the finished batch if water was added or cooked off.`
+      : items.length
+        ? 'Some ingredients have no gram weight. Enter the weight of the finished batch to log it by the gram.'
+        : 'Weigh the finished batch if water was added or cooked off.';
+    const line = (label, t) => `<div><b>${esc(label)}</b> · ${kc(t.kcal)} kcal · ${pcf(t)}</div>`;
+    const gi = f.units.findIndex((u) => u.label === 'g');
+    $('#rc-summary', b).innerHTML = line('Whole batch', f.n) +
+      (f.recipe.servings ? line(f.units[0].label, totalsOf(f, 1, 0)) : '') +
+      (gi >= 0 ? line('100 g', totalsOf(f, 100, gi)) : '');
+  }
+
+  function refresh() {
+    const out = $('#rc-items', b);
+    out.innerHTML = items.length ? items.map((it, i) => {
+      const t = totalsOf(it);
+      return `
+        <button class="entry" data-i="${i}">
+          <div class="main">
+            <div class="title">${esc(it.name)}</div>
+            <div class="sub">${esc(amountText(it.qty, it.units[it.unit]?.label || ''))}${it.brand ? ' · ' + esc(it.brand) : ''}</div>
+          </div>
+          <div style="text-align:right"><div class="kcal">${kc(t.kcal)}</div>${pcf(t)}</div>
+        </button>`;
+    }).join('') : '<div class="empty">Add everything that goes into the batch.</div>';
+    $$('[data-i]', out).forEach((x) => (x.onclick = () => {
+      const i = +x.dataset.i;
+      openFoodSheet({
+        food: items[i], entry: items[i],
+        ingredient: {
+          onSave: (amt) => { Object.assign(items[i], amt); refresh(); },
+          onRemove: () => { items.splice(i, 1); refresh(); },
+        },
+      });
+    }));
+    summary();
+  }
+
+  $('#rc-add', b).onclick = () => openAddSheet(null, (f, amt) => {
+    items.push({ name: f.name, brand: f.brand || '', src: f.src, key: f.key, n: f.n, units: f.units, ...amt });
+    refresh();
+  });
+  for (const id of ['#rc-servings', '#rc-serving', '#rc-grams']) $(id, b).addEventListener('input', summary);
+  $('#rc-go', b).onclick = () => {
+    const next = read();
+    if (!next.name) return toast('Give the recipe a name.');
+    if (!items.length) return toast('Add at least one ingredient.');
+    putMyFood(next);
+    sheet.close();
+    render();
+    toast(food ? 'Recipe updated' : 'Recipe saved to My foods');
+  };
+  $('#rc-del', b)?.addEventListener('click', () => {
+    if (!confirm(`Delete “${food.name}” from My foods? Past diary entries are kept.`)) return;
+    deleteMyFood(food.key);
+    sheet.close();
+    render();
+  });
+  refresh();
 }
 
 // ---------------------------------------------------------------- barcode scanner
@@ -879,22 +1035,26 @@ function openScanner(onCode) {
 function renderFoods() {
   const view = $('#view');
   view.innerHTML = `
-    <div class="btn-row" style="margin-top:12px"><button class="btn primary" id="new-food">✚ Create food</button></div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn primary" id="new-food">✚ Create food</button>
+      <button class="btn primary" id="new-recipe">✚ Create recipe</button>
+    </div>
     <section class="card" style="margin-top:12px">
       ${db.myFoods.length ? db.myFoods.map((f, i) => {
         const t = totalsOf(f, f.def.qty, f.def.unit);
         return `
           <button class="row-btn" data-i="${i}">
             <div class="main">
-              <div class="title">${esc(f.name)}</div>
+              <div class="title">${esc(f.name)}${f.recipe ? '<span class="tag">Recipe</span>' : ''}</div>
               <div class="sub">${kc(t.kcal)} kcal · ${esc(amountText(f.def.qty, f.units[f.def.unit]?.label || ''))}${f.brand ? ' · ' + esc(f.brand) : ''}</div>
               ${pcf(t)}
             </div>
             <span class="muted small">${f.custom ? 'Edit' : 'Log'}</span>
           </button>`;
-      }).join('') : '<div class="empty">Save foods you eat often with ☆, or create your own from a nutrition label.</div>'}
+      }).join('') : '<div class="empty">Save foods you eat often with ☆, create your own from a nutrition label, or build a recipe from its ingredients.</div>'}
     </section>`;
   $('#new-food', view).onclick = () => openCreateFood({});
+  $('#new-recipe', view).onclick = () => openRecipe();
   $$('[data-i]', view).forEach((b) => (b.onclick = () => {
     const f = db.myFoods[+b.dataset.i];
     if (f.custom) openFoodActions(f);
@@ -909,11 +1069,11 @@ function openFoodActions(f) {
     body: `
       <div class="btn-row" style="flex-direction:column">
         <button class="btn primary" id="fa-log">Log it today</button>
-        <button class="btn" id="fa-edit">Edit food</button>
+        <button class="btn" id="fa-edit">${f.recipe ? 'Edit recipe' : 'Edit food'}</button>
       </div>`,
   });
   $('#fa-log', sheet.body).onclick = () => { sheet.close(); viewDate = noon(); openFoodSheet({ food: f, meal: defaultMeal() }); };
-  $('#fa-edit', sheet.body).onclick = () => { sheet.close(); openCreateFood({ food: f }); };
+  $('#fa-edit', sheet.body).onclick = () => { sheet.close(); (f.recipe ? openRecipe : openCreateFood)({ food: f }); };
 }
 
 // ---------------------------------------------------------------- trends

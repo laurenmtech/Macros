@@ -6,6 +6,7 @@ A MyFitnessPal-style macro tracker built as an installable web app (PWA). No bui
 - **Food search**: 7,793 USDA generic foods are built in (`data/usda-foods.json`) and work offline. Brand and restaurant items come from the USDA FoodData Central API.
 - **Barcode scan**: Open Food Facts, with a USDA branded-foods fallback. Uses native `BarcodeDetector` where available (Android Chrome) and bundled ZXing elsewhere (iPhone).
 - **Quick add**, **custom foods** (with optional barcode), **saved foods**, and 7/30-day **trends**.
+- **Recipes**: build a batch from weighed ingredients under My foods, then log it by the gram (soup) or by the piece (egg cups).
 - Data lives in `localStorage` on the device. Back it up with Goals → Export.
 
 ## Run locally
