@@ -1,4 +1,4 @@
-// Macros — a MyFitnessPal-style macro tracker that lives on the home screen.
+// Macros — a macro tracker that lives on the home screen.
 // All data stays in this browser's localStorage; use Goals → Export to back it up.
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -788,21 +788,24 @@ function openCreateFood({ food, barcode, onSaved, notFound } = {}) {
       </div>
       <div class="section-label">Per serving</div>
       <div class="grid4">
-        <label class="field"><span>kcal</span><input id="cf-kcal" inputmode="decimal" value="${per.kcal ?? ''}"></label>
         ${MACROS.map(([k, name]) => `<label class="field"><span>${name} g</span><input id="cf-${k}" inputmode="decimal" value="${per[k] ?? ''}"></label>`).join('')}
+        <label class="field"><span>kcal</span><input id="cf-kcal" inputmode="decimal" value="${per.kcal ?? ''}" placeholder="auto"></label>
       </div>
+      <p class="muted small" style="margin:0">Calories fill in from the macros. Type over them if the label says something different.</p>
       <label class="field" style="max-width:25%"><span>Fiber g</span><input id="cf-fib" inputmode="decimal" value="${per.fib || ''}"></label>
       <label class="field"><span>Barcode (optional)</span><input id="cf-barcode" inputmode="numeric" value="${esc(food?.barcode || barcode || '')}"></label>
       <button class="btn primary block" id="cf-go" style="margin-top:12px">${food ? 'Save changes' : 'Save food'}</button>
       ${food ? '<button class="btn danger block" id="cf-del" style="margin-top:8px">Delete food</button>' : ''}`,
   });
   const b = sheet.body;
+  const num = (id) => { const v = parseQty($(id, b).value); return Number.isFinite(v) && v >= 0 ? v : 0; };
+  const kcalFromMacros = () => Math.round(MACROS.reduce((a, [k, , , m]) => a + num(`#cf-${k}`) * m, 0));
+  for (const [k] of MACROS) $(`#cf-${k}`, b).addEventListener('input', () => { $('#cf-kcal', b).value = kcalFromMacros() || ''; });
   $('#cf-go', b).onclick = () => {
-    const num = (id) => { const v = parseQty($(id, b).value); return Number.isFinite(v) && v >= 0 ? v : 0; };
     const name = $('#cf-name', b).value.trim();
     if (!name) return toast('Give the food a name.');
     const n = { kcal: num('#cf-kcal'), p: num('#cf-p'), c: num('#cf-c'), f: num('#cf-f'), fib: num('#cf-fib') };
-    if (!$('#cf-kcal', b).value.trim()) n.kcal = n.p * 4 + n.c * 4 + n.f * 9;
+    if (!$('#cf-kcal', b).value.trim()) n.kcal = kcalFromMacros();
     const label = $('#cf-serving', b).value.trim() || '1 serving';
     const grams = num('#cf-grams');
     const units = [{ label: /^\d/.test(label) ? label : `1 ${label}`, mult: 1 }];
