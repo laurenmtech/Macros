@@ -7,6 +7,7 @@ A MyFitnessPal-style macro tracker built as an installable web app (PWA). No bui
 - **Barcode scan**: Open Food Facts, with a USDA branded-foods fallback. Uses native `BarcodeDetector` where available (Android Chrome) and bundled ZXing elsewhere (iPhone).
 - **Quick add**, **custom foods** (with optional barcode), **saved foods**, and 7/30-day **trends**.
 - **Recipes**: build a batch from weighed ingredients under My foods, then log it by the gram (soup) or by the piece (egg cups).
+- **Sharing**: send any food or recipe in My foods as a link. The food is packed into the link itself, so nothing is uploaded; the other person opens it or pastes it under My foods → Import.
 - Data lives in `localStorage` on the device. Back it up with Goals → Export.
 
 ## Run locally
