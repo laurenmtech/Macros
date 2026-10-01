@@ -300,3 +300,23 @@ table.avg th { font-size: 12px; color: var(--muted); font-weight: 500; }
 
 .hint { font-size: 13px; color: var(--ink-2); background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
 .hint a { color: var(--accent); }
+
+/* ---------- weight ---------- */
+.weight-log { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.weight-log input { width: 100%; min-width: 0; height: 44px; }
+.weight-log .field { margin: 12px 0 6px; min-width: 0; }
+.weight-log .btn { margin: 12px 0 6px; }
+.weight-stats { display: flex; gap: 8px; margin: 8px 0 12px; }
+.weight-stats > div { flex: 1; background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.weight-stats span { display: block; font-size: 12px; color: var(--ink-2); }
+.weight-stats b { font-size: 17px; font-weight: 650; }
+.wchart { margin: 8px 0 4px; touch-action: pan-y; }
+.wchart svg { display: block; user-select: none; -webkit-user-select: none; }
+.wchart text { font-size: 11px; fill: var(--muted); }
+.wchart .g { stroke: var(--grid); stroke-width: 1; }
+.wchart .goal { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.wchart .goal-label { fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.wchart .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.wchart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.wchart .sel { fill: var(--accent); stroke: var(--surface); stroke-width: 2.5; }
+.wchart .cross { stroke: var(--line); stroke-width: 1; }
