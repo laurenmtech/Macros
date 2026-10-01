@@ -77,7 +77,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   padding: calc(env(safe-area-inset-top) + 6px) 8px 6px;
   background: var(--page);
 }
-.topbar.no-nav .icon-btn { visibility: hidden; }
+.topbar.no-nav .icon-btn, .topbar.back #next-day { visibility: hidden; }
 .date-label { background: none; border: 0; font-weight: 650; font-size: 17px; padding: 8px 12px; }
 .icon-btn {
   width: 44px; height: 44px; border-radius: 22px;
@@ -99,13 +99,14 @@ main {
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--grid);
 }
-.tabbar button {
+.tabbar > button {
   background: none; border: 0; color: var(--muted);
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   font-size: 11px; padding: 4px 0;
 }
-.tabbar button span { font-size: 20px; line-height: 1.1; }
-.tabbar button.active { color: var(--accent); }
+.tabbar > button span { font-size: 20px; line-height: 1.1; }
+.tabbar > button span svg { display: block; width: 22px; height: 22px; }
+.tabbar > button.active { color: var(--accent); }
 
 /* ---------- cards ---------- */
 .card {
@@ -323,3 +324,75 @@ table.avg th { font-size: 12px; color: var(--muted); font-weight: 500; }
 .wchart .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .wchart .sel { fill: var(--accent); stroke: var(--surface); stroke-width: 2.5; }
 .wchart .cross { stroke: var(--line); stroke-width: 1; }
+
+/* ---------- workouts ---------- */
+.trends-link { display: flex; justify-content: flex-end; margin: 2px 0 -8px; }
+.link-btn { background: none; border: 0; color: var(--accent); font-weight: 600; font-size: 14px; padding: 6px 0; }
+.btn.sm { padding: 8px 14px; font-size: 14px; }
+.row-btn .start {
+  flex: none; background: var(--accent); color: var(--accent-ink);
+  border-radius: 16px; padding: 6px 14px; font-size: 14px; font-weight: 600;
+}
+.wk-title { display: flex; align-items: center; gap: 8px; }
+.wk-title input { font-size: 18px; font-weight: 650; background: none; padding: 6px 8px; margin-left: -8px; }
+.wk-title input:not(:focus) { border-color: transparent; }
+
+.ex-block {
+  background: var(--surface); border: 1px solid var(--grid); border-radius: var(--radius);
+  box-shadow: var(--shadow); margin: 12px 0; padding: 10px 12px 2px;
+}
+.ex-block.ss { border-left: 4px solid var(--ss); }
+.ex-block.ss-next { margin-bottom: 4px; }
+.ex-block.ss-prev { margin-top: 4px; }
+.ex-head { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.ex-name { flex: 1; min-width: 0; font-weight: 650; color: var(--accent); }
+.ex-head .icon-btn { width: 36px; height: 36px; font-size: 20px; margin-right: -6px; }
+.ss-label { font-size: 12px; font-weight: 650; color: var(--ss); text-transform: uppercase; letter-spacing: .05em; }
+.ex-meta { font-size: 13px; color: var(--muted); margin: 2px 0; }
+.rest-btn { display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 4px 0; color: var(--accent); font-size: 14px; text-align: left; }
+.sets { margin: 4px -12px 0; }
+.set-row { display: grid; grid-template-columns: var(--grid); gap: 8px; align-items: center; padding: 4px 12px; text-align: center; min-height: 40px; }
+.set-row.head { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); min-height: 0; padding-bottom: 2px; }
+.set-row:not(.head):nth-child(odd) { background: var(--surface-2); }
+.set-row .set-n { font-weight: 650; }
+.set-row .prev { font-size: 13px; color: var(--muted); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-row input { text-align: center; padding: 6px 4px; background: var(--page); }
+.set-row .check {
+  width: 36px; height: 32px; border: 0; border-radius: 8px; justify-self: center;
+  background: var(--page); color: var(--muted); font-weight: 700;
+}
+.set-row.done { background: color-mix(in srgb, var(--good) 16%, transparent) !important; }
+.set-row.done input { background: transparent; }
+.set-row.done .check { background: var(--good); color: #fff; }
+.set-actions { display: flex; margin: 0 -12px; }
+.set-actions button { flex: 1; background: none; border: 0; padding: 10px 0; color: var(--ink-2); font-weight: 600; font-size: 14px; }
+.menu-list { display: flex; flex-direction: column; gap: 8px; }
+
+.chips { display: flex; gap: 6px; overflow-x: auto; margin: 10px -16px; padding: 0 16px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; border: 1px solid var(--line); background: none; border-radius: 18px; padding: 6px 12px; font-size: 14px; }
+.chips button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.ex-row.sel { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ex-row.sel .add { background: var(--accent); color: var(--accent-ink); font-size: 16px; }
+.picker-go {
+  position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom)); background: var(--page);
+  padding: 10px 0 calc(env(safe-area-inset-bottom) + 20px); margin-bottom: calc(-20px - env(safe-area-inset-bottom));
+}
+.check-line { display: flex; gap: 10px; align-items: center; margin: 12px 0; font-size: 14px; }
+.check-line input { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+
+/* The bar above the tabs: rest countdown, or a way back to the workout from other tabs. */
+#wk-bar[hidden] { display: none; }
+#wk-bar { grid-column: 1 / -1; margin: -6px -8px 6px; border-bottom: 1px solid var(--grid); }
+.wk-rest { position: relative; display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.wk-rest .meter { position: absolute; left: 0; right: 0; top: 0; height: 3px; margin: 0; border-radius: 0; background: none; }
+.wk-rest .meter > i { background: var(--accent); border-radius: 0; transition: width 1s linear; }
+.wk-rest .t { flex: 1; font-weight: 650; font-size: 17px; }
+.wk-rest button { border: 0; background: var(--surface-2); border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 14px; }
+.wk-mini { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 10px 16px; font-size: 14px; text-align: left; }
+.wk-mini .dot { width: 8px; height: 8px; border-radius: 4px; background: var(--good); flex: none; }
+.wk-mini .n { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-mini .r { color: var(--accent); font-weight: 600; }
+.wk-mini .t { color: var(--ink-2); }
+body.has-wkbar main { padding-bottom: calc(env(safe-area-inset-bottom) + 150px); }
+body.has-wkbar #toast { bottom: calc(env(safe-area-inset-bottom) + 136px); }

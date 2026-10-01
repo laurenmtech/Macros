@@ -27,6 +27,11 @@ const defaults = () => ({
   weights: {}, // { 'YYYY-MM-DD': kg }
   goalWeight: 0, // kg; 0 = no goal weight
   weightUnit: /-(US|LR|MM)$/i.test(navigator.language) ? 'lb' : 'kg',
+  liftUnit: /-(US|LR|MM)$/i.test(navigator.language) ? 'lb' : 'kg',
+  exercises: [], // custom exercises
+  routines: [],
+  workouts: [], // finished workouts, newest first
+  active: null, // workout in progress
 });
 
 let db = load();
@@ -359,23 +364,31 @@ let today = dkey(new Date());
 let tab = 'diary';
 
 function render() {
+  // Trends opens from the Diary as its own screen, with the previous-day arrow turned into a back arrow.
   const bar = $('.topbar');
-  bar.classList.toggle('no-nav', tab !== 'diary');
+  bar.classList.toggle('no-nav', tab !== 'diary' && tab !== 'trends');
+  bar.classList.toggle('back', tab === 'trends');
+  $('#prev-day').setAttribute('aria-label', tab === 'trends' ? 'Back to diary' : 'Previous day');
   if (tab === 'diary') {
     const k = dkey(viewDate);
     const rel = { [dkey(new Date())]: 'Today', [dkey(addDays(new Date(), -1))]: 'Yesterday', [dkey(addDays(new Date(), 1))]: 'Tomorrow' }[k];
     $('#date-label').textContent = rel || viewDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
   } else {
-    $('#date-label').textContent = { trends: 'Trends', foods: 'My foods', settings: 'Goals & data' }[tab];
+    $('#date-label').textContent = { trends: 'Trends', workout: 'Workout', foods: 'My foods', settings: 'Goals & data' }[tab];
   }
-  $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
-  ({ diary: renderDiary, trends: renderTrends, foods: renderFoods, settings: renderSettings })[tab]();
+  $$('.tabbar [data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === (tab === 'trends' ? 'diary' : tab)));
+  ({ diary: renderDiary, trends: renderTrends, workout: renderWorkout, foods: renderFoods, settings: renderSettings })[tab]();
+  updateWkBar();
 }
 
-$('#prev-day').onclick = () => { viewDate = addDays(viewDate, -1); render(); };
+$('#prev-day').onclick = () => {
+  if (tab === 'trends') { tab = 'diary'; render(); window.scrollTo(0, 0); return; }
+  viewDate = addDays(viewDate, -1);
+  render();
+};
 $('#next-day').onclick = () => { viewDate = addDays(viewDate, 1); render(); };
 $('#date-label').onclick = () => { if (tab === 'diary') { viewDate = noon(); render(); } };
-$$('.tabbar button').forEach((b) => (b.onclick = () => { tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
+$$('.tabbar [data-tab]').forEach((b) => (b.onclick = () => { tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
 
 // Keep "today" in sync if the app is left open overnight.
 document.addEventListener('visibilitychange', () => {
@@ -441,6 +454,7 @@ function renderDiary() {
   const prev = db.log[prevKey] || [];
 
   let html = `
+    <div class="trends-link"><button class="link-btn" id="open-trends">▥ Trends ›</button></div>
     <section class="card card-pad" aria-label="Daily summary">
       <div class="cal-eq">
         <div><div class="num">${kc(G.kcal)}</div><div class="lbl">Goal</div></div>
@@ -484,6 +498,7 @@ function renderDiary() {
 
   const view = $('#view');
   view.innerHTML = html;
+  $('#open-trends', view).onclick = () => { tab = 'trends'; render(); window.scrollTo(0, 0); };
   $$('[data-add]', view).forEach((b) => (b.onclick = () => openAddSheet(b.dataset.add)));
   $$('[data-entry]', view).forEach((b) => (b.onclick = () => {
     const e = entries.find((x) => x.id === b.dataset.entry);
@@ -1388,6 +1403,14 @@ function renderSettings() {
     <section class="card card-pad" id="weight-card"></section>
 
     <section class="card card-pad">
+      <h2>Workouts</h2>
+      <div class="field" style="margin-bottom:0"><span>Units for lifts</span><div class="seg" style="margin:0">
+        <button data-lunit="lb" class="${db.liftUnit === 'lb' ? 'active' : ''}">lb</button>
+        <button data-lunit="kg" class="${db.liftUnit === 'kg' ? 'active' : ''}">kg</button>
+      </div></div>
+    </section>
+
+    <section class="card card-pad">
       <h2>Food search</h2>
       <p class="muted small" style="margin:6px 0 0">About 7,800 common foods are built in and work offline. Brand-name and barcode searches use USDA FoodData Central and Open Food Facts. A <a href="https://fdc.nal.usda.gov/api-key-signup" target="_blank" rel="noopener">free USDA API key</a> raises the brand-search limit from a few per hour to 1,000.</p>
       <label class="field"><span>USDA API key</span><input id="usda-key" value="${esc(db.usdaKey)}" placeholder="Using shared DEMO_KEY" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
@@ -1401,7 +1424,7 @@ function renderSettings() {
         <button class="btn" id="import">Import backup</button>
       </div>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
-      <p class="muted small" style="margin:12px 0 0">${Object.keys(db.log).length} days logged · ${db.myFoods.length} saved foods</p>
+      <p class="muted small" style="margin:12px 0 0">${Object.keys(db.log).length} days logged · ${db.myFoods.length} saved foods · ${db.workouts.length} workouts</p>
     </section>`;
 
   const inp = (id) => $(id, view);
@@ -1424,6 +1447,11 @@ function renderSettings() {
     toast('Goals saved');
   };
   renderWeight(inp('#weight-card'));
+  $$('[data-lunit]', view).forEach((b) => (b.onclick = () => {
+    db.liftUnit = b.dataset.lunit;
+    save();
+    $$('[data-lunit]', view).forEach((x) => x.classList.toggle('active', x === b));
+  }));
   inp('#usda-key').addEventListener('change', (e) => { db.usdaKey = e.target.value.trim(); save(); toast('API key saved'); });
 
   inp('#export').onclick = async () => {
@@ -1626,6 +1654,718 @@ addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { const c = $('#weight-card'); if (c && tab === 'settings') renderWeight(c); }, 150);
 });
+
+// ---------------------------------------------------------------- workouts
+
+// Routines are saved plans; db.workouts is what was actually done; db.active is the workout in progress,
+// saved as you go so closing the app mid-workout loses nothing.
+// An exercise item is { ex, name, type, rest (s), ss (superset id or null), sets: [{ w (kg), r, t (s), done }] }.
+// Items in the same superset sit next to each other; the rest timer runs after the last one in the group.
+
+const EX_TYPES = { weight: 'Weight × reps', reps: 'Reps', time: 'Time' };
+const FIELDS = { weight: ['w', 'r'], reps: ['r'], time: ['t'] };
+const MUSCLES = ['Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Glutes', 'Core', 'Cardio', 'Full body'];
+const REST_OPTIONS = [0, 30, 45, 60, 90, 120, 150, 180, 240, 300];
+const SS_COLORS = ['--accent', '--carbs', '--fat', '--fiber'];
+const TIMER_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M9.5 2.5h5"/></svg>';
+
+// Built-in exercises by muscle group. A ":r" suffix means reps only, ":t" means timed; the rest are weight × reps.
+const LIBRARY = Object.entries({
+  Chest: 'Bench Press (Barbell)|Bench Press (Dumbbell)|Bench Press (Smith Machine)|Incline Bench Press (Barbell)|Incline Bench Press (Dumbbell)|Decline Bench Press (Barbell)|Chest Press (Machine)|Incline Chest Press (Machine)|Chest Fly (Dumbbell)|Incline Chest Fly (Dumbbell)|Pec Deck (Machine)|Cable Fly Crossovers|Low to High Cable Fly|Dumbbell Pullover|Push Up:r|Incline Push Up:r|Decline Push Up:r|Chest Dip:r',
+  Back: 'Deadlift (Barbell)|Bent Over Row (Barbell)|Bent Over Row (Dumbbell)|Single Arm Row (Dumbbell)|Pendlay Row (Barbell)|T-Bar Row|Seated Cable Row|Seated Row (Machine)|Chest Supported Row (Dumbbell)|Lat Pulldown (Cable)|Close Grip Lat Pulldown (Cable)|Single Arm Lat Pulldown (Cable)|Straight Arm Pulldown (Cable)|Pull Up:r|Chin Up:r|Weighted Pull Up|Assisted Pull Up (Machine)|Inverted Row:r|Rack Pull (Barbell)|Shrug (Barbell)|Shrug (Dumbbell)|Back Extension:r|Superman:r',
+  Shoulders: 'Overhead Press (Barbell)|Overhead Press (Dumbbell)|Seated Shoulder Press (Dumbbell)|Shoulder Press (Machine)|Arnold Press (Dumbbell)|Push Press (Barbell)|Landmine Press|Lateral Raise (Dumbbell)|Lateral Raise (Cable)|Lateral Raise (Machine)|Front Raise (Dumbbell)|Front Raise (Plate)|Rear Delt Fly (Dumbbell)|Reverse Fly (Machine)|Face Pull (Cable)|Upright Row (Barbell)|Pike Push Up:r|Handstand Push Up:r',
+  Arms: 'Bicep Curl (Barbell)|Bicep Curl (Dumbbell)|Bicep Curl (Cable)|EZ Bar Curl|Hammer Curl (Dumbbell)|Hammer Curl (Cable)|Preacher Curl (EZ Bar)|Preacher Curl (Machine)|Incline Curl (Dumbbell)|Concentration Curl (Dumbbell)|Spider Curl (Dumbbell)|Reverse Curl (Barbell)|Triceps Pushdown (Cable)|Triceps Rope Pushdown (Cable)|Overhead Triceps Extension (Cable)|Overhead Triceps Extension (Dumbbell)|Skullcrusher (EZ Bar)|Close Grip Bench Press (Barbell)|Triceps Kickback (Dumbbell)|Triceps Dip:r|Bench Dip:r|Wrist Curl (Dumbbell)',
+  Legs: 'Squat (Barbell)|Front Squat (Barbell)|Goblet Squat (Dumbbell)|Hack Squat (Machine)|Smith Machine Squat|Leg Press (Machine)|Bulgarian Split Squat (Dumbbell)|Lunge (Dumbbell)|Walking Lunge (Dumbbell)|Reverse Lunge (Dumbbell)|Step Up (Dumbbell)|Leg Extension (Machine)|Lying Leg Curl (Machine)|Seated Leg Curl (Machine)|Romanian Deadlift (Barbell)|Romanian Deadlift (Dumbbell)|Stiff Leg Deadlift (Barbell)|Sumo Deadlift (Barbell)|Trap Bar Deadlift|Good Morning (Barbell)|Hip Adduction (Machine)|Standing Calf Raise (Machine)|Seated Calf Raise (Machine)|Calf Raise (Dumbbell)|Bodyweight Squat:r|Jump Squat:r|Pistol Squat:r|Nordic Hamstring Curl:r|Wall Sit:t',
+  Glutes: 'Hip Thrust (Barbell)|Hip Thrust (Machine)|Glute Bridge (Barbell)|Glute Bridge:r|Single Leg Glute Bridge:r|Cable Kickback|Glute Kickback (Machine)|Hip Abduction (Machine)|Cable Pull Through|Frog Pump:r',
+  Core: 'Plank:t|Side Plank:t|Hollow Hold:t|Crunch:r|Bicycle Crunch:r|Sit Up:r|Decline Crunch:r|Cable Crunch|Hanging Leg Raise:r|Hanging Knee Raise:r|Lying Leg Raise:r|Russian Twist:r|Ab Wheel Rollout:r|Dead Bug:r|Mountain Climber:r|Toes to Bar:r|V Up:r|Pallof Press (Cable)|Woodchopper (Cable)',
+  Cardio: 'Treadmill:t|Running:t|Walking:t|Incline Walk:t|Cycling:t|Stationary Bike:t|Elliptical:t|Rowing Machine:t|Stair Climber:t|Jump Rope:t|Swimming:t|Hiking:t|HIIT:t',
+  'Full body': 'Kettlebell Swing|Power Clean (Barbell)|Clean and Jerk (Barbell)|Snatch (Barbell)|Thruster (Barbell)|Dumbbell Snatch|Turkish Get Up (Kettlebell)|Burpee:r|Box Jump:r|Battle Ropes:t|Farmers Walk:t|Sled Push:t',
+}).flatMap(([muscle, list]) => list.split('|').map((x) => {
+  const [name, t] = x.split(':');
+  return { id: 'lib:' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name, muscle, type: { r: 'reps', t: 'time' }[t] || 'weight' };
+}));
+const LIB_BY_ID = new Map(LIBRARY.map((x) => [x.id, x]));
+
+const exInfo = (id) => db.exercises.find((x) => x.id === id) || LIB_BY_ID.get(id);
+const exName = (it) => exInfo(it.ex)?.name || it.name || 'Exercise';
+
+// Lifts are stored in kg and shown in db.liftUnit. Values typed in the current unit come back exactly;
+// converted ones round to the nearest half so 100 kg shows as 220.5 lb, not 220.46.
+const toLift = (kg) => (db.liftUnit === 'lb' ? kg / LB : kg);
+const fromLift = (v) => (db.liftUnit === 'lb' ? v * LB : v);
+function lw(kg) {
+  const v = toLift(kg), q = Math.round(v * 4) / 4;
+  return String(Math.abs(v - q) < 0.01 ? q : Math.round(v * 2) / 2);
+}
+
+const fmtDur = (sec) => { sec = Math.round(sec); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+function fmtClock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600);
+  return h ? `${h}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : fmtDur(s);
+}
+function fmtMinutes(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+}
+function fmtRest(sec) {
+  if (!sec) return 'Off';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return [m && `${m}min`, (s || !m) && `${s}s`].filter(Boolean).join(' ');
+}
+
+// Times are typed as m:ss (or m.ss on a number pad), or as plain seconds.
+function parseTime(s) {
+  const m = s.match(/^(\d+)[:.,](\d{1,2})$/);
+  const v = m ? +m[1] * 60 + +m[2] : /^\d+$/.test(s) ? +s : NaN;
+  return v > 0 ? v : null;
+}
+
+function readField(f, s) {
+  s = s.trim();
+  if (!s) return null;
+  if (f === 't') return parseTime(s);
+  const v = parseQty(s);
+  if (f === 'w') return Number.isFinite(v) && v >= 0 ? fromLift(v) : null;
+  return v > 0 ? Math.round(v) : null;
+}
+const fieldVal = (f, v) => (v == null ? '' : f === 'w' ? lw(v) : f === 't' ? fmtDur(v) : String(v));
+const fmtSet = (type, s) => (type === 'weight' ? `${lw(s.w ?? 0)} × ${s.r ?? '–'}` : type === 'reps' ? `${s.r ?? '–'} reps` : fmtDur(s.t ?? 0));
+
+// The sets from the most recent finished workout that included this exercise.
+function lastSets(ex) {
+  for (const w of db.workouts) {
+    const it = w.items.find((x) => x.ex === ex);
+    if (it) return { when: w.start, sets: it.sets };
+  }
+  return null;
+}
+
+function wkStats(items, doneOnly) {
+  let sets = 0, vol = 0;
+  for (const it of items) {
+    for (const s of it.sets) {
+      if (doneOnly && !s.done) continue;
+      sets++;
+      if (it.type === 'weight') vol += (s.w || 0) * (s.r || 0);
+    }
+  }
+  return { sets, vol };
+}
+
+const statBoxes = (ms, { sets, vol }, elapsedId) => `
+  <div class="weight-stats">
+    <div><span>Duration</span><b ${elapsedId ? `id="${elapsedId}"` : ''}>${elapsedId ? fmtClock(ms) : fmtMinutes(ms)}</b></div>
+    <div><span>Volume</span><b>${kc(toLift(vol))} ${db.liftUnit}</b></div>
+    <div><span>Sets</span><b>${sets}</b></div>
+  </div>`;
+
+// A new exercise in a routine starts from what you did last time; in a live workout it starts empty,
+// with last time shown alongside each set.
+function newItem(id, live) {
+  const x = exInfo(id);
+  const last = lastSets(id);
+  const sets = (last?.sets || [{}, {}, {}]).map((s) => (live
+    ? { w: null, r: null, t: null, done: false }
+    : { w: s.w ?? null, r: s.r ?? null, t: s.t ?? null }));
+  return { ex: id, name: x.name, type: x.type, rest: x.muscle === 'Cardio' ? 0 : 90, ss: null, sets };
+}
+
+// The shape a routine stores: the plan without check marks.
+const routineItem = (it) => ({
+  ex: it.ex, name: exName(it), type: it.type, rest: it.rest ?? 0, ss: it.ss || null,
+  sets: it.sets.map((s) => ({ w: s.w ?? null, r: s.r ?? null, t: s.t ?? null })),
+});
+
+// A superset needs at least two exercises side by side; drop the link from any left on its own.
+function normalizeSS(items) {
+  items.forEach((it, i) => {
+    if (it.ss && items[i - 1]?.ss !== it.ss && items[i + 1]?.ss !== it.ss) it.ss = null;
+  });
+}
+
+function lastLine(it) {
+  const last = lastSets(it.ex);
+  if (!last) return '';
+  const d = new Date(last.when).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return `<div class="ex-meta">Last · ${d} · ${esc(last.sets.map((s) => fmtSet(it.type, s)).join(', '))}</div>`;
+}
+
+// Exercise cards with their sets. Modes: 'edit' (routine editor), 'live' (workout in progress),
+// 'plan' (a routine, read-only) and 'done' (a finished workout).
+function blocksHtml(items, mode) {
+  const live = mode === 'live', edit = mode === 'edit' || live;
+  const groups = [...new Set(items.map((it) => it.ss).filter(Boolean))];
+  const heads = { w: db.liftUnit, r: 'Reps', t: 'Time' };
+  return items.map((it, i) => {
+    const fields = FIELDS[it.type];
+    const linkedNext = it.ss && items[i + 1]?.ss === it.ss;
+    const linkedPrev = it.ss && items[i - 1]?.ss === it.ss;
+    const color = it.ss ? `--ss: var(${SS_COLORS[groups.indexOf(it.ss) % SS_COLORS.length]})` : '';
+    const last = live ? lastSets(it.ex) : null;
+    const grid = ['32px', live && 'minmax(0,1.3fr)', ...fields.map(() => 'minmax(0,1fr)'), live && '40px'].filter(Boolean).join(' ');
+    const restText = `${TIMER_ICON}Rest timer: ${fmtRest(it.rest)}${it.ss && it.rest ? ' after each round' : ''}`;
+    const rest = linkedNext || mode === 'done' ? ''
+      : edit ? `<button class="rest-btn" data-rest="${i}">${restText}</button>` : `<div class="rest-btn">${restText}</div>`;
+    const cell = (s, j, f) => {
+      if (!edit) return `<span>${s[f] == null ? '–' : esc(fieldVal(f, s[f]))}</span>`;
+      const ph = last?.sets[j]?.[f] != null ? fieldVal(f, last.sets[j][f]) : f === 't' ? '0:00' : '–';
+      return `<input data-s="${i}.${j}" data-f="${f}" inputmode="${f === 'r' ? 'numeric' : 'decimal'}" value="${esc(fieldVal(f, s[f]))}" placeholder="${esc(ph)}" aria-label="Set ${j + 1} ${heads[f]}">`;
+    };
+    return `
+      <div class="ex-block ${it.ss ? 'ss' : ''} ${linkedNext ? 'ss-next' : ''} ${linkedPrev ? 'ss-prev' : ''}" style="${color}">
+        <div class="ex-head">
+          <div class="ex-name">${esc(exName(it))}</div>
+          ${edit ? `<button class="icon-btn" data-menu="${i}" aria-label="Options for ${esc(exName(it))}">⋯</button>` : ''}
+        </div>
+        ${it.ss && !linkedPrev ? '<div class="ss-label">Superset</div>' : ''}
+        ${mode === 'edit' || mode === 'plan' ? lastLine(it) : ''}
+        ${rest}
+        <div class="sets" style="--grid: ${grid}">
+          <div class="set-row head"><span>Set</span>${live ? '<span class="prev">Previous</span>' : ''}${fields.map((f) => `<span>${heads[f]}</span>`).join('')}${live ? '<span>✓</span>' : ''}</div>
+          ${it.sets.map((s, j) => `
+            <div class="set-row ${s.done ? 'done' : ''}">
+              <span class="set-n">${j + 1}</span>
+              ${live ? `<span class="prev">${last?.sets[j] ? esc(fmtSet(it.type, last.sets[j])) : '–'}</span>` : ''}
+              ${fields.map((f) => cell(s, j, f)).join('')}
+              ${live ? `<button class="check" data-check="${i}.${j}" aria-label="Set ${j + 1} done" aria-pressed="${!!s.done}">✓</button>` : ''}
+            </div>`).join('')}
+        </div>
+        ${edit ? `<div class="set-actions"><button data-addset="${i}">+ Add set</button>${it.sets.length > 1 ? `<button data-rmset="${i}">− Remove set</button>` : ''}</div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// changed() runs after every edit (to save); refresh() redraws after a change to the structure.
+function bindBlocks(root, items, { live, changed, refresh }) {
+  const at = (el, k) => el.dataset[k].split('.').map(Number);
+  $$('input[data-s]', root).forEach((inp) => {
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('input', () => {
+      const [i, j] = at(inp, 's');
+      items[i].sets[j][inp.dataset.f] = readField(inp.dataset.f, inp.value);
+      changed();
+    });
+  });
+  $$('[data-check]', root).forEach((b) => (b.onclick = () => toggleSet(...at(b, 'check'))));
+  $$('[data-addset]', root).forEach((b) => (b.onclick = () => {
+    const sets = items[+b.dataset.addset].sets, l = sets[sets.length - 1] || {};
+    sets.push({ w: l.w ?? null, r: l.r ?? null, t: l.t ?? null, ...(live ? { done: false } : {}) });
+    changed();
+    refresh();
+  }));
+  $$('[data-rmset]', root).forEach((b) => (b.onclick = () => {
+    items[+b.dataset.rmset].sets.pop();
+    changed();
+    refresh();
+  }));
+  $$('[data-rest]', root).forEach((b) => (b.onclick = () => {
+    const it = items[+b.dataset.rest];
+    openRestPicker(it.rest, (sec) => { it.rest = sec; changed(); refresh(); });
+  }));
+  $$('[data-menu]', root).forEach((b) => (b.onclick = () => openExMenu(items, +b.dataset.menu, live, () => { changed(); refresh(); })));
+}
+
+function openRestPicker(cur, onPick) {
+  const sheet = openSheet({
+    title: 'Rest timer',
+    short: true,
+    body: `
+      <p class="muted small" style="margin:0 0 12px">Counts down when you check off a set.</p>
+      <div class="meal-pick">${REST_OPTIONS.map((s) => `<button data-sec="${s}" class="${s === cur ? 'active' : ''}">${fmtRest(s)}</button>`).join('')}</div>`,
+  });
+  $$('[data-sec]', sheet.body).forEach((b) => (b.onclick = () => { sheet.close(); onPick(+b.dataset.sec); }));
+}
+
+function openExMenu(items, i, live, done) {
+  const it = items[i], next = items[i + 1];
+  const acts = [
+    ['replace', 'Replace exercise'],
+    i > 0 && ['up', 'Move up'],
+    next && ['down', 'Move down'],
+    next && !(it.ss && next.ss === it.ss) && ['link', `Superset with ${exName(next)}`],
+    it.ss && ['unlink', 'Remove from superset'],
+    ['remove', 'Remove exercise'],
+  ].filter(Boolean);
+  const sheet = openSheet({
+    title: exName(it),
+    short: true,
+    body: `<div class="menu-list">${acts.map(([k, l]) => `<button class="btn block ${k === 'remove' ? 'danger' : ''}" data-act="${k}">${esc(l)}</button>`).join('')}</div>`,
+  });
+  $$('[data-act]', sheet.body).forEach((b) => (b.onclick = () => {
+    sheet.close();
+    const k = b.dataset.act;
+    if (k === 'replace') {
+      return openExercisePicker({
+        single: true,
+        onPick: ([id]) => {
+          const fresh = newItem(id, live);
+          Object.assign(it, { ex: id, name: fresh.name, type: fresh.type, sets: fresh.sets });
+          done();
+        },
+      });
+    }
+    if (k === 'up' || k === 'down') {
+      const j = k === 'up' ? i - 1 : i + 1;
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    if (k === 'link') {
+      const id = it.ss || uid(), old = next.ss;
+      for (const x of items) if (old && x.ss === old) x.ss = id;
+      it.ss = next.ss = id;
+    }
+    if (k === 'unlink') it.ss = null;
+    if (k === 'remove') items.splice(i, 1);
+    normalizeSS(items);
+    done();
+  }));
+}
+
+// ---------------------------------------------------------------- exercise library
+
+function openExercisePicker({ single = false, onPick }) {
+  let muscle = '';
+  const picked = [];
+  const sheet = openSheet({
+    title: single ? 'Replace exercise' : 'Add exercises',
+    body: `
+      <div class="search"><input type="search" id="xp-q" placeholder="Search exercises" aria-label="Search exercises" autocomplete="off"></div>
+      <div class="chips">${['', ...MUSCLES].map((m) => `<button data-m="${m}" class="${m ? '' : 'active'}">${m || 'All'}</button>`).join('')}</div>
+      <button class="btn block" id="xp-new" style="margin-bottom:8px">✚ Create exercise</button>
+      <div class="list" id="xp-list"></div>
+      ${single ? '' : '<div class="picker-go"><button class="btn primary block" id="xp-go" disabled>Add exercises</button></div>'}`,
+  });
+  const b = sheet.body, out = $('#xp-list', b), input = $('#xp-q', b);
+
+  const row = (x) => {
+    const on = picked.includes(x.id);
+    return `
+      <button class="row-btn ex-row ${on ? 'sel' : ''}" data-id="${x.id}">
+        <div class="main">
+          <div class="title">${esc(x.name)}${x.custom ? '<span class="tag">Custom</span>' : ''}</div>
+          <div class="sub">${esc(x.muscle)} · ${EX_TYPES[x.type]}</div>
+        </div>
+        ${x.custom ? '<span class="muted small" data-edit role="button">Edit</span>' : ''}
+        <span class="add">${on ? '✓' : '+'}</span>
+      </button>`;
+  };
+
+  function list() {
+    const terms = searchTerms(input.value);
+    const all = [...db.exercises, ...LIBRARY].filter((x) => !muscle || x.muscle === muscle);
+    let html;
+    if (terms.length) {
+      const hits = all.map((x) => [scoreName(x.name.toLowerCase(), terms), x]).filter(([s]) => s >= 0).sort((a, c) => c[0] - a[0]);
+      html = hits.length ? hits.map(([, x]) => row(x)).join('') : '<div class="empty">No matches. Create it as your own exercise.</div>';
+    } else {
+      // Recently done exercises first, then everything A–Z.
+      const recent = muscle ? [] : [...new Set(db.workouts.flatMap((w) => w.items.map((it) => it.ex)))].map(exInfo).filter(Boolean).slice(0, 8);
+      const rest = all.filter((x) => !recent.includes(x)).sort((a, c) => a.name.localeCompare(c.name));
+      html = (recent.length ? `<div class="section-label" style="padding:0 16px">Recent</div>${recent.map(row).join('')}<div class="section-label" style="padding:0 16px">All exercises</div>` : '') + rest.map(row).join('');
+    }
+    out.innerHTML = html;
+    const go = $('#xp-go', b);
+    if (go) {
+      go.disabled = !picked.length;
+      go.textContent = picked.length ? `Add ${picked.length} exercise${picked.length > 1 ? 's' : ''}` : 'Add exercises';
+    }
+    $$('[data-id]', out).forEach((r) => (r.onclick = (ev) => {
+      const x = exInfo(r.dataset.id);
+      if (ev.target.closest('[data-edit]')) return openCreateExercise({ ex: x, onChange: list });
+      if (single) { sheet.close(); onPick([x.id]); return; }
+      const k = picked.indexOf(x.id);
+      if (k >= 0) picked.splice(k, 1);
+      else picked.push(x.id);
+      list();
+    }));
+  }
+
+  let debounce;
+  input.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(list, 120); });
+  $$('[data-m]', b).forEach((c) => (c.onclick = () => {
+    muscle = c.dataset.m;
+    $$('[data-m]', b).forEach((y) => y.classList.toggle('active', y === c));
+    list();
+  }));
+  $('#xp-new', b).onclick = () => openCreateExercise({
+    name: input.value.trim(), muscle,
+    onChange: (x) => {
+      if (!x) return list();
+      if (single) { sheet.close(); onPick([x.id]); return; }
+      picked.push(x.id);
+      input.value = '';
+      list();
+    },
+  });
+  $('#xp-go', b)?.addEventListener('click', () => { sheet.close(); onPick(picked); });
+  list();
+}
+
+function openCreateExercise({ ex, name = '', muscle = '', onChange }) {
+  let type = ex?.type || 'weight';
+  const sheet = openSheet({
+    title: ex ? 'Edit exercise' : 'Create exercise',
+    short: true,
+    body: `
+      <label class="field"><span>Name</span><input id="ce-name" value="${esc(ex?.name ?? name)}" placeholder="e.g. Sled Pull"></label>
+      <label class="field"><span>Muscle group</span><select id="ce-muscle">${MUSCLES.map((m) => `<option ${m === (ex?.muscle || muscle || 'Chest') ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+      <div class="field"><span>Track</span><div class="seg" style="margin:0">${Object.entries(EX_TYPES).map(([k, l]) => `<button data-type="${k}" class="${k === type ? 'active' : ''}">${l}</button>`).join('')}</div></div>
+      <button class="btn primary block" id="ce-go" style="margin-top:8px">${ex ? 'Save changes' : 'Save exercise'}</button>
+      ${ex ? '<button class="btn danger block" id="ce-del" style="margin-top:8px">Delete exercise</button>' : ''}`,
+  });
+  const b = sheet.body;
+  $$('[data-type]', b).forEach((x) => (x.onclick = () => {
+    type = x.dataset.type;
+    $$('[data-type]', b).forEach((y) => y.classList.toggle('active', y === x));
+  }));
+  $('#ce-go', b).onclick = () => {
+    const nm = $('#ce-name', b).value.trim();
+    if (!nm) return toast('Give the exercise a name.');
+    const dupe = [...db.exercises, ...LIBRARY].find((x) => x.id !== ex?.id && x.name.toLowerCase() === nm.toLowerCase());
+    if (dupe) return toast(`“${dupe.name}” is already in the library.`);
+    const next = { id: ex?.id || 'ex:' + uid(), name: nm, muscle: $('#ce-muscle', b).value, type, custom: true };
+    if (ex) {
+      Object.assign(ex, next);
+      for (const r of db.routines) for (const it of r.items) if (it.ex === ex.id) Object.assign(it, { name: nm, type });
+    } else db.exercises.unshift(next);
+    save();
+    sheet.close();
+    render();
+    onChange?.(ex ? null : next);
+  };
+  $('#ce-del', b)?.addEventListener('click', () => {
+    if (!confirm(`Delete “${ex.name}”? Past workouts keep it, but it will be taken out of your routines.`)) return;
+    db.exercises = db.exercises.filter((x) => x.id !== ex.id);
+    for (const r of db.routines) {
+      r.items = r.items.filter((it) => it.ex !== ex.id);
+      normalizeSS(r.items);
+    }
+    save();
+    sheet.close();
+    render();
+    onChange?.(null);
+  });
+}
+
+// ---------------------------------------------------------------- workout tab
+
+let historyAll = false;
+
+function renderWorkout() {
+  const view = $('#view');
+  if (db.active) return renderActive(view);
+  const hist = historyAll ? db.workouts : db.workouts.slice(0, 10);
+  view.innerHTML = `
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn primary" id="wk-empty">Start empty workout</button>
+      <button class="btn" id="wk-new">✚ New routine</button>
+    </div>
+    <div class="section-label">Routines</div>
+    <section class="card" style="margin-top:6px">
+      ${db.routines.length ? db.routines.map((r, i) => `
+        <button class="row-btn" data-r="${i}">
+          <div class="main">
+            <div class="title">${esc(r.name)}</div>
+            <div class="sub">${esc(r.items.map(exName).join(', ') || 'No exercises')}</div>
+          </div>
+          <span class="start" data-start role="button" aria-label="Start ${esc(r.name)}">Start</span>
+        </button>`).join('') : '<div class="empty">Save a routine for workouts you repeat, like “Push day”.<br>Starting it fills in your exercises and sets.</div>'}
+    </section>
+    <div class="section-label">History</div>
+    <section class="card" style="margin-top:6px">
+      ${hist.length ? hist.map((w) => {
+        const { sets, vol } = wkStats(w.items);
+        const d = new Date(w.start).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        return `
+          <button class="row-btn" data-w="${w.id}">
+            <div class="main">
+              <div class="title">${esc(w.name)}</div>
+              <div class="sub">${d} · ${fmtMinutes(w.end - w.start)} · ${sets} set${sets === 1 ? '' : 's'}${vol ? ` · ${kc(toLift(vol))} ${db.liftUnit}` : ''}</div>
+            </div>
+          </button>`;
+      }).join('') : '<div class="empty">Finished workouts show up here.</div>'}
+      ${!historyAll && db.workouts.length > 10 ? `<div class="meal-actions"><button id="wk-more">Show all ${db.workouts.length}</button></div>` : ''}
+    </section>`;
+
+  $('#wk-empty', view).onclick = () => startWorkout();
+  $('#wk-new', view).onclick = () => openRoutineEditor();
+  $('#wk-more', view)?.addEventListener('click', () => { historyAll = true; render(); });
+  $$('[data-r]', view).forEach((b) => (b.onclick = (ev) => {
+    const r = db.routines[+b.dataset.r];
+    if (ev.target.closest('[data-start]')) startWorkout(r);
+    else openRoutine(r);
+  }));
+  $$('[data-w]', view).forEach((b) => (b.onclick = () => openWorkout(db.workouts.find((w) => w.id === b.dataset.w))));
+}
+
+function openRoutine(r) {
+  const sheet = openSheet({
+    title: 'Routine',
+    body: `
+      <div class="food-title">${esc(r.name)}</div>
+      <button class="btn primary block" id="rd-start" style="margin:12px 0 4px">Start routine</button>
+      ${blocksHtml(r.items, 'plan') || '<div class="empty">No exercises yet.</div>'}
+      <button class="btn block" id="rd-edit" style="margin-top:12px">Edit routine</button>`,
+  });
+  $('#rd-start', sheet.body).onclick = () => { sheet.close(); startWorkout(r); };
+  $('#rd-edit', sheet.body).onclick = () => { sheet.close(); openRoutineEditor(r); };
+}
+
+function openRoutineEditor(r) {
+  const items = structuredClone(r?.items || []);
+  const sheet = openSheet({
+    title: r ? 'Edit routine' : 'New routine',
+    body: `
+      <label class="field"><span>Name</span><input id="re-name" value="${esc(r?.name)}" placeholder="e.g. Push day"></label>
+      <div id="re-blocks"></div>
+      <button class="btn block" id="re-add" style="margin-top:4px">✚ Add exercises</button>
+      <button class="btn primary block" id="re-save" style="margin-top:12px">${r ? 'Save changes' : 'Save routine'}</button>
+      ${r ? '<button class="btn danger block" id="re-del" style="margin-top:8px">Delete routine</button>' : ''}`,
+  });
+  const b = sheet.body;
+  const refresh = () => {
+    const box = $('#re-blocks', b);
+    box.innerHTML = blocksHtml(items, 'edit') || '<div class="empty">Add the exercises for this routine.<br>Sets fill in from the last time you did each one.</div>';
+    bindBlocks(box, items, { live: false, changed: () => {}, refresh });
+  };
+  $('#re-add', b).onclick = () => openExercisePicker({ onPick: (ids) => { items.push(...ids.map((id) => newItem(id, false))); refresh(); } });
+  $('#re-save', b).onclick = () => {
+    const name = $('#re-name', b).value.trim();
+    if (!name) return toast('Give the routine a name.');
+    if (!items.length) return toast('Add at least one exercise.');
+    const next = { id: r?.id || uid(), name, items: items.map(routineItem) };
+    const i = db.routines.findIndex((x) => x.id === next.id);
+    if (i >= 0) db.routines[i] = next;
+    else db.routines.push(next);
+    save();
+    sheet.close();
+    render();
+    toast(r ? 'Routine updated' : 'Routine saved');
+  };
+  $('#re-del', b)?.addEventListener('click', () => {
+    if (!confirm(`Delete the routine “${r.name}”? Past workouts are kept.`)) return;
+    db.routines = db.routines.filter((x) => x.id !== r.id);
+    save();
+    sheet.close();
+    render();
+  });
+  refresh();
+}
+
+function startWorkout(r) {
+  if (db.active && !confirm('A workout is already in progress. Discard it and start a new one?')) {
+    tab = 'workout';
+    render();
+    return;
+  }
+  const h = new Date().getHours();
+  db.active = {
+    id: uid(), routineId: r?.id || null, start: Date.now(), restEnd: null, restFor: 0,
+    name: r?.name || (h < 12 ? 'Morning workout' : h < 17 ? 'Afternoon workout' : 'Evening workout'),
+    items: (r?.items || []).map((it) => ({
+      ...structuredClone(it), name: exName(it), type: exInfo(it.ex)?.type || it.type,
+      sets: it.sets.map((s) => ({ ...s, done: false })),
+    })),
+  };
+  save();
+  tab = 'workout';
+  render();
+  window.scrollTo(0, 0);
+}
+
+function renderActive(view) {
+  const a = db.active;
+  view.innerHTML = `
+    <section class="card card-pad">
+      <div class="wk-title">
+        <input id="wk-name" value="${esc(a.name)}" aria-label="Workout name">
+        <button class="btn primary sm" id="wk-finish">Finish</button>
+      </div>
+      ${statBoxes(Date.now() - a.start, wkStats(a.items, true), 'wk-elapsed')}
+    </section>
+    <div id="wk-blocks">${blocksHtml(a.items, 'live') || '<div class="empty">Add exercises from the library to get going.</div>'}</div>
+    <button class="btn block" id="wk-add">✚ Add exercises</button>
+    <button class="btn danger block" id="wk-discard" style="margin-top:8px">Discard workout</button>`;
+  bindBlocks($('#wk-blocks', view), a.items, { live: true, changed: save, refresh: render });
+  $('#wk-name', view).addEventListener('input', (e) => { a.name = e.target.value; save(); });
+  $('#wk-add', view).onclick = () => openExercisePicker({ onPick: (ids) => { a.items.push(...ids.map((id) => newItem(id, true))); save(); render(); } });
+  $('#wk-discard', view).onclick = () => {
+    if (!confirm('Discard this workout? Nothing from it will be saved.')) return;
+    db.active = null;
+    save();
+    render();
+  };
+  $('#wk-finish', view).onclick = openFinish;
+}
+
+// Checking off a set fills any empty box from last time (or the set above), then starts the rest timer.
+function toggleSet(i, j) {
+  const a = db.active, it = a.items[i], s = it.sets[j];
+  if (s.done) s.done = false;
+  else {
+    const last = lastSets(it.ex)?.sets[j], above = it.sets[j - 1];
+    for (const f of FIELDS[it.type]) s[f] ??= last?.[f] ?? above?.[f] ?? null;
+    const missing = FIELDS[it.type].find((f) => s[f] == null || (f !== 'w' && !(s[f] > 0)));
+    if (missing) return toast({ w: 'Enter the weight first.', r: 'Enter the reps first.', t: 'Enter the time first.' }[missing]);
+    s.done = true;
+    navigator.vibrate?.(30);
+    unlockAudio();
+    const inGroup = it.ss && a.items[i + 1]?.ss === it.ss;
+    if (!inGroup && it.rest) { a.restEnd = Date.now() + it.rest * 1000; a.restFor = it.rest; }
+  }
+  save();
+  render();
+}
+
+function openFinish() {
+  const a = db.active;
+  const done = a.items
+    .map((it) => ({ ...it, sets: it.sets.filter((s) => s.done).map(({ w, r, t }) => ({ w, r, t })) }))
+    .filter((it) => it.sets.length);
+  if (!done.length) {
+    if (confirm('No sets are checked off, so there is nothing to save. Discard this workout?')) { db.active = null; save(); render(); }
+    return;
+  }
+  const stats = wkStats(done);
+  const skipped = wkStats(a.items).sets - stats.sets;
+  const routine = db.routines.find((r) => r.id === a.routineId);
+  const plan = a.items.map(routineItem);
+  const changed = routine && JSON.stringify(plan) !== JSON.stringify(routine.items.map(routineItem));
+  const sheet = openSheet({
+    title: 'Finish workout',
+    short: true,
+    body: `
+      ${statBoxes(Date.now() - a.start, stats)}
+      <label class="field"><span>Name</span><input id="fw-name" value="${esc(a.name)}"></label>
+      ${skipped ? `<p class="muted small">${skipped} set${skipped > 1 ? 's' : ''} not checked off won't be saved.</p>` : ''}
+      ${changed ? `<label class="check-line"><input type="checkbox" id="fw-update" checked>Update “${esc(routine.name)}” with today's exercises and sets</label>` : ''}
+      ${routine ? '' : '<label class="check-line"><input type="checkbox" id="fw-routine">Also save as a routine</label>'}
+      <button class="btn primary block" id="fw-go" style="margin-top:8px">Save workout</button>`,
+  });
+  $('#fw-go', sheet.body).onclick = () => {
+    const name = $('#fw-name', sheet.body).value.trim() || a.name;
+    db.workouts.unshift({
+      id: a.id, name, routineId: a.routineId, start: a.start, end: Date.now(),
+      items: done.map((it) => ({ ex: it.ex, name: exName(it), type: it.type, rest: it.rest, ss: it.ss || null, sets: it.sets })),
+    });
+    if ($('#fw-update', sheet.body)?.checked) routine.items = plan;
+    if ($('#fw-routine', sheet.body)?.checked) db.routines.push({ id: uid(), name, items: plan });
+    db.active = null;
+    save();
+    sheet.close();
+    render();
+    window.scrollTo(0, 0);
+    toast('Workout saved');
+  };
+}
+
+function openWorkout(w) {
+  const d = new Date(w.start);
+  const sheet = openSheet({
+    title: 'Workout',
+    body: `
+      <div class="food-title">${esc(w.name)}</div>
+      <div class="muted small">${d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })} · ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</div>
+      ${statBoxes(w.end - w.start, wkStats(w.items))}
+      ${blocksHtml(w.items, 'done')}
+      <button class="btn block" id="wd-routine" style="margin-top:12px">Save as routine</button>
+      <button class="btn danger block" id="wd-del" style="margin-top:8px">Delete workout</button>`,
+  });
+  $('#wd-routine', sheet.body).onclick = () => {
+    db.routines.push({ id: uid(), name: w.name, items: w.items.map(routineItem) });
+    save();
+    sheet.close();
+    render();
+    toast(`Saved “${w.name}” to routines`);
+  };
+  $('#wd-del', sheet.body).onclick = () => {
+    if (!confirm('Delete this workout from your history?')) return;
+    const i = db.workouts.indexOf(w);
+    db.workouts.splice(i, 1);
+    save();
+    sheet.close();
+    render();
+    toast('Workout deleted', { label: 'Undo', run: () => { db.workouts.splice(i, 0, w); save(); render(); } });
+  };
+}
+
+// ---------------------------------------------------------------- rest timer
+
+// The bar above the tabs shows the rest countdown on the Workout tab, and a way back to the
+// workout from any other tab. It is rebuilt only when its mode changes so taps aren't lost mid-press.
+let wkBarMode = '';
+
+function updateWkBar() {
+  const el = $('#wk-bar'), a = db.active;
+  const rest = a?.restEnd ? Math.max(0, Math.ceil((a.restEnd - Date.now()) / 1000)) : 0;
+  const mode = !a ? '' : tab !== 'workout' ? 'mini' : rest ? 'rest' : '';
+  if (mode !== wkBarMode) {
+    wkBarMode = mode;
+    el.hidden = !mode;
+    document.body.classList.toggle('has-wkbar', !!mode);
+    el.innerHTML = mode === 'rest'
+      ? '<div class="wk-rest"><div class="meter"><i></i></div><span class="t"></span><button data-adj="-15">−15</button><button data-adj="15">+15</button><button data-adj="skip">Skip</button></div>'
+      : mode === 'mini' ? '<button class="wk-mini" data-adj="open"><span class="dot"></span><span class="n"></span><span class="r"></span><span class="t"></span></button>' : '';
+  }
+  if (mode === 'rest') {
+    $('.t', el).textContent = `Rest ${fmtDur(rest)}`;
+    $('.meter i', el).style.width = `${Math.min(100, (rest / a.restFor) * 100)}%`;
+  } else if (mode === 'mini') {
+    $('.n', el).textContent = a.name || 'Workout';
+    $('.r', el).textContent = rest ? `Rest ${fmtDur(rest)}` : '';
+    $('.t', el).textContent = fmtClock(Date.now() - a.start);
+  }
+}
+
+$('#wk-bar').onclick = (e) => {
+  const v = e.target.closest('[data-adj]')?.dataset.adj, a = db.active;
+  if (!v || !a) return;
+  if (v === 'open') { tab = 'workout'; render(); window.scrollTo(0, 0); return; }
+  if (v === 'skip') a.restEnd = null;
+  else if (a.restEnd) {
+    a.restEnd = Math.max(Date.now(), a.restEnd + v * 1000);
+    a.restFor = Math.max(1, a.restFor + +v);
+  }
+  save();
+  updateWkBar();
+};
+
+// A short beep when rest is over. Audio has to be started from a tap, so checking a set unlocks it.
+let audio;
+function unlockAudio() {
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume();
+  } catch { /* no audio */ }
+}
+function beep() {
+  if (!audio) return;
+  const t = audio.currentTime;
+  for (const d of [0, 0.25]) {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.frequency.value = 880;
+    g.gain.setValueAtTime(0.001, t + d);
+    g.gain.exponentialRampToValueAtTime(0.3, t + d + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.18);
+    o.connect(g).connect(audio.destination);
+    o.start(t + d);
+    o.stop(t + d + 0.2);
+  }
+}
+
+setInterval(() => {
+  const a = db.active;
+  if (!a) return;
+  if (a.restEnd && Date.now() >= a.restEnd) {
+    // Only make noise if the app was open when time ran out, not when coming back to it later.
+    if (Date.now() - a.restEnd < 3000) { beep(); navigator.vibrate?.([200, 100, 200]); }
+    a.restEnd = null;
+    save();
+    toast('Rest is over');
+  }
+  const el = $('#wk-elapsed');
+  if (el) el.textContent = fmtClock(Date.now() - a.start);
+  updateWkBar();
+}, 1000);
 
 // ---------------------------------------------------------------- boot
 
