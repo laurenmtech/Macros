@@ -307,6 +307,8 @@ table.avg th { font-size: 12px; color: var(--muted); font-weight: 500; }
 /* Date inputs render taller and centered on iOS; match them to the text box beside them. */
 .weight-log input { height: 44px; -webkit-appearance: none; appearance: none; text-align: left; }
 .weight-log input::-webkit-date-and-time-value { text-align: left; }
+/* iOS gives date inputs a wide minimum size that spills into the next column; keep it inside its own. */
+.weight-log input[type="date"] { display: block; max-width: 100%; min-width: 0; line-height: 22px; }
 .weight-stats { display: flex; gap: 8px; margin: 14px 0 12px; }
 .weight-stats > div { flex: 1; background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
 .weight-stats span { display: block; font-size: 12px; color: var(--ink-2); }

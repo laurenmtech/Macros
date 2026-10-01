@@ -1633,5 +1633,8 @@ render();
 checkSharedLink();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js');
+  // When an update takes over, reload once so the new version shows now, not on the next launch.
+  const updating = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (updating) location.reload(); });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
 }
