@@ -1,5 +1,5 @@
 // Offline support: cache the app shell and food database; always go to the network for food APIs.
-const CACHE = 'macros-v12';
+const CACHE = 'ironbyte-v15';
 const SHELL = [
   './', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
@@ -22,7 +22,19 @@ self.addEventListener('activate', (e) => {
 // Stale-while-revalidate for same-origin files: instant from cache, refreshed in the background.
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  // Google Fonts never change at a given URL, so keep them once fetched and they work offline too.
+  if (req.method === 'GET' && /^fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
+    e.respondWith(caches.open(CACHE).then(async (cache) => {
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res.ok || res.type === 'opaque') cache.put(req, res.clone());
+      return res;
+    }));
+    return;
+  }
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const hit = await cache.match(req, { ignoreSearch: true });

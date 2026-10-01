@@ -1,6 +1,6 @@
-# Macros
+# Ironbyte
 
-A MyFitnessPal-style macro tracker built as an installable web app (PWA). No build step, no backend.
+A macro tracker and workout log built as an installable web app (PWA). No build step, no backend.
 
 - **Diary**: Breakfast / Lunch / Dinner / Snacks, calories remaining, and protein/carbs/fat vs goals. Swipe left or right to change days; "Copy from yesterday" on empty meals.
 - **Food search**: 7,793 USDA generic foods are built in (`data/usda-foods.json`) and work offline. Brand and restaurant items come from the USDA FoodData Central API.

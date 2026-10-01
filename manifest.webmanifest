@@ -1,13 +1,13 @@
 {
-  "name": "Macros",
-  "short_name": "Macros",
-  "description": "Track calories, protein, carbs and fat.",
+  "name": "Ironbyte",
+  "short_name": "Ironbyte",
+  "description": "Track your macros and your workouts.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f9f9f7",
-  "theme_color": "#f9f9f7",
+  "background_color": "#07060f",
+  "theme_color": "#07060f",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

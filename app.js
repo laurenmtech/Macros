@@ -1,4 +1,4 @@
-// Macros — a macro tracker that lives on the home screen.
+// Ironbyte — a macro tracker and workout log that lives on the home screen.
 // All data stays in this browser's localStorage; use Goals → Export to back it up.
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -1228,7 +1228,7 @@ function openShare(f) {
   $('#sh-copy', b).onclick = copy;
   $('#sh-share', b)?.addEventListener('click', async () => {
     try {
-      await navigator.share({ title: f.name, text: `${f.name} (Macros ${kind})`, url });
+      await navigator.share({ title: f.name, text: `${f.name} (Ironbyte ${kind})`, url });
       sheet.close();
     } catch (e) {
       if (e.name !== 'AbortError') copy();
@@ -1263,7 +1263,7 @@ async function openShared(text) {
   try {
     f = await readShared(text);
   } catch {
-    toast('That is not a Macros share link.');
+    toast('That is not an Ironbyte share link.');
     return false;
   }
   const kind = f.recipe ? 'recipe' : 'food';
@@ -1455,7 +1455,7 @@ function renderSettings() {
   inp('#usda-key').addEventListener('change', (e) => { db.usdaKey = e.target.value.trim(); save(); toast('API key saved'); });
 
   inp('#export').onclick = async () => {
-    const name = `macros-backup-${dkey(new Date())}.json`;
+    const name = `ironbyte-backup-${dkey(new Date())}.json`;
     const file = new File([JSON.stringify(db)], name, { type: 'application/json' });
     try {
       if (navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file], title: name });
@@ -1479,7 +1479,7 @@ function renderSettings() {
       render();
       toast('Backup restored');
     } catch {
-      toast('That file is not a Macros backup.');
+      toast('That file is not an Ironbyte backup.');
     }
   };
 }
@@ -1823,7 +1823,7 @@ function blocksHtml(items, mode) {
         <div class="sets" style="--grid: ${grid}">
           <div class="set-row head"><span>Set</span>${live ? '<span class="prev">Previous</span>' : ''}${fields.map((f) => `<span>${heads[f]}</span>`).join('')}${live ? '<span>✓</span>' : ''}</div>
           ${it.sets.map((s, j) => `
-            <div class="set-row ${s.done ? 'done' : ''}">
+            <div class="set-row ${s.done ? 'done' : ''} ${live && justChecked === `${i}.${j}` ? 'just' : ''}">
               <span class="set-n">${j + 1}</span>
               ${live ? `<span class="prev">${last?.sets[j] ? esc(fmtSet(it.type, last.sets[j])) : '–'}</span>` : ''}
               ${fields.map((f) => cell(s, j, f)).join('')}
@@ -2186,6 +2186,7 @@ function renderActive(view) {
     <button class="btn block" id="wk-add">✚ Add exercises</button>
     <button class="btn danger block" id="wk-discard" style="margin-top:8px">Discard workout</button>`;
   bindBlocks($('#wk-blocks', view), a.items, { live: true, changed: save, refresh: render });
+  justChecked = null;
   $('#wk-name', view).addEventListener('input', (e) => { a.name = e.target.value; save(); });
   $('#wk-add', view).onclick = () => openExercisePicker({ onPick: (ids) => { a.items.push(...ids.map((id) => newItem(id, true))); save(); render(); } });
   $('#wk-discard', view).onclick = () => {
@@ -2197,6 +2198,8 @@ function renderActive(view) {
   $('#wk-finish', view).onclick = openFinish;
 }
 
+let justChecked = null; // the set checked a moment ago, so it alone gets the check-off animation
+
 // Checking off a set fills any empty box from last time (or the set above), then starts the rest timer.
 function toggleSet(i, j) {
   const a = db.active, it = a.items[i], s = it.sets[j];
@@ -2207,6 +2210,7 @@ function toggleSet(i, j) {
     const missing = FIELDS[it.type].find((f) => s[f] == null || (f !== 'w' && !(s[f] > 0)));
     if (missing) return toast({ w: 'Enter the weight first.', r: 'Enter the reps first.', t: 'Enter the time first.' }[missing]);
     s.done = true;
+    justChecked = `${i}.${j}`;
     navigator.vibrate?.(30);
     unlockAudio();
     const inGroup = it.ss && a.items[i + 1]?.ss === it.ss;
@@ -2308,6 +2312,7 @@ function updateWkBar() {
   }
   if (mode === 'rest') {
     $('.t', el).textContent = `Rest ${fmtDur(rest)}`;
+    $('.wk-rest', el).classList.toggle('ending', rest <= 5);
     $('.meter i', el).style.width = `${Math.min(100, (rest / a.restFor) * 100)}%`;
   } else if (mode === 'mini') {
     $('.n', el).textContent = a.name || 'Workout';
