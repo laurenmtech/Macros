@@ -1495,8 +1495,8 @@ function renderWeight(card) {
     <div class="weight-log">
       <label class="field"><span>Date</span><input id="w-date" type="date" value="${today}" max="${today}"></label>
       <label class="field"><span>Weight (${u})</span><input id="w-val" inputmode="decimal" value="${db.weights[today] ? wt(db.weights[today]) : ''}" placeholder="${latest ? wt(latest.kg) : ''}"></label>
-      <button class="btn primary" id="w-log">Log</button>
     </div>
+    <button class="btn primary block" id="w-log">Log weight</button>
     ${summary}
     ${all.length ? `
     <div class="seg">
