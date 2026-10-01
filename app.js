@@ -26,6 +26,9 @@ const defaults = () => ({
   recents: [], // most recent first
   weights: {}, // { 'YYYY-MM-DD': kg }
   goalWeight: 0, // kg; 0 = no goal weight
+  since: Date.now(), // first use, so the backup reminder waits a while before showing
+  lastBackup: 0,
+  backupSnooze: 0, // no backup reminder until this time
   weightUnit: /-(US|LR|MM)$/i.test(navigator.language) ? 'lb' : 'kg',
   liftUnit: /-(US|LR|MM)$/i.test(navigator.language) ? 'lb' : 'kg',
   exercises: [], // custom exercises
@@ -95,6 +98,8 @@ function sumAll(entries) {
   }
   return o;
 }
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const titleCase = (s) =>
   String(s || '').toLowerCase().replace(/(^|[\s(/&-])([a-z])/g, (_, a, b) => a + b.toUpperCase());
@@ -454,6 +459,11 @@ function renderDiary() {
   const prev = db.log[prevKey] || [];
 
   let html = `
+    ${needsBackup() ? `
+    <div class="hint backup-nag">
+      <b>Time for a backup.</b> Your log lives only on this phone, so if the browser's data is cleared or you switch phones, it's gone. Save a copy somewhere safe, like Files or iCloud Drive.
+      <div class="btn-row" style="margin-top:10px"><button class="btn" id="nag-later">Later</button><button class="btn primary" id="nag-backup">Back up now</button></div>
+    </div>` : ''}
     <div class="trends-link"><button class="link-btn" id="open-trends">▥ Trends ›</button></div>
     <section class="card card-pad" aria-label="Daily summary">
       <div class="cal-eq">
@@ -499,6 +509,8 @@ function renderDiary() {
   const view = $('#view');
   view.innerHTML = html;
   $('#open-trends', view).onclick = () => { tab = 'trends'; render(); window.scrollTo(0, 0); };
+  $('#nag-backup', view)?.addEventListener('click', async () => { if (await exportBackup()) render(); });
+  $('#nag-later', view)?.addEventListener('click', () => { db.backupSnooze = Date.now() + 7 * DAY; save(); render(); });
   $$('[data-add]', view).forEach((b) => (b.onclick = () => openAddSheet(b.dataset.add)));
   $$('[data-entry]', view).forEach((b) => (b.onclick = () => {
     const e = entries.find((x) => x.id === b.dataset.entry);
@@ -1379,6 +1391,44 @@ function diff(v, unit) {
   return v > 0 ? `▲ ${r}${unit} over` : `▼ ${r}${unit} under`;
 }
 
+// ---------------------------------------------------------------- backups
+
+const DAY = 864e5;
+// Feedback goes by email. The address is put together here, not written out whole, to keep it away from simple spam scrapers.
+function feedbackMailto() {
+  const to = ['ironbyte.change016', 'passmail.net'].join('@');
+  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const body = `What happened, or what would you like to see?\n\n\n\n---\nThese details help with bugs (delete them if you like):\n${installed ? 'Home-screen app' : 'Browser'} · ${navigator.userAgent}`;
+  return `mailto:${to}?subject=${encodeURIComponent('Ironbyte feedback')}&body=${encodeURIComponent(body)}`;
+}
+
+// Nudge on the Diary once there is something worth losing and 30 days have passed since the last backup.
+function needsBackup() {
+  const hasData = Object.keys(db.log).length || db.workouts.length || db.myFoods.length;
+  return hasData && Date.now() - Math.max(db.lastBackup, db.since) > 30 * DAY && Date.now() > db.backupSnooze;
+}
+
+// Share the backup file (on phones, to Files, iCloud, email…) or download it. Resolves true once it is saved.
+async function exportBackup() {
+  const name = `ironbyte-backup-${dkey(new Date())}.json`;
+  const file = new File([JSON.stringify({ ...db, lastBackup: Date.now() })], name, { type: 'application/json' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: name });
+    else {
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: name });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('Could not save the backup.');
+    return false;
+  }
+  db.lastBackup = Date.now();
+  save();
+  toast('Backup saved');
+  return true;
+}
+
 // ---------------------------------------------------------------- settings
 
 function renderSettings() {
@@ -1418,13 +1468,22 @@ function renderSettings() {
 
     <section class="card card-pad">
       <h2>Your data</h2>
-      <p class="muted small" style="margin:6px 0 12px">Everything is stored only on this device, in this browser. Export a backup now and then. If you clear Safari or Chrome website data, your log is erased.</p>
+      <p class="muted small" style="margin:6px 0 12px">Everything is stored only on this device, in this browser. Export a backup now and then. If you clear Safari or Chrome website data, your log is erased.${standalone ? '' : ' Adding Ironbyte to your Home Screen also helps: browsers may clear data for websites you haven\'t opened in a while, but not for home-screen apps.'}</p>
       <div class="btn-row">
         <button class="btn" id="export">Export backup</button>
         <button class="btn" id="import">Import backup</button>
       </div>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
-      <p class="muted small" style="margin:12px 0 0">${Object.keys(db.log).length} days logged · ${db.myFoods.length} saved foods · ${db.workouts.length} workouts</p>
+      <p class="muted small" style="margin:12px 0 0">${plural(Object.keys(db.log).length, 'day')} logged · ${plural(db.myFoods.length, 'saved food')} · ${plural(db.workouts.length, 'workout')}</p>
+      <p class="muted small" style="margin:4px 0 0">${db.lastBackup ? `Last backup ${new Date(db.lastBackup).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No backup yet'}</p>
+    </section>
+
+    <section class="card card-pad about">
+      <h2>About Ironbyte</h2>
+      <p><b>Private by design.</b> There are no accounts, and nothing you log is sent to us. It all stays on this device. Food searches go to <a href="https://fdc.nal.usda.gov/" target="_blank" rel="noopener">USDA FoodData Central</a>, and barcode lookups to <a href="https://world.openfoodfacts.org/" target="_blank" rel="noopener">Open Food Facts</a>.</p>
+      <p><b>Not medical advice.</b> Nutrition data comes from public databases and may be inaccurate. Ironbyte is a tracking tool, not a substitute for a doctor or dietitian. Talk to a professional before big changes to your diet or training, and lift at your own risk.</p>
+      <a class="btn block" href="${feedbackMailto()}">Send feedback or report a bug</a>
+      <p class="small" style="text-align:center">Opens your email app. You can also write to ironbyte.change016 at passmail.net.</p>
     </section>`;
 
   const inp = (id) => $(id, view);
@@ -1454,18 +1513,7 @@ function renderSettings() {
   }));
   inp('#usda-key').addEventListener('change', (e) => { db.usdaKey = e.target.value.trim(); save(); toast('API key saved'); });
 
-  inp('#export').onclick = async () => {
-    const name = `ironbyte-backup-${dkey(new Date())}.json`;
-    const file = new File([JSON.stringify(db)], name, { type: 'application/json' });
-    try {
-      if (navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file], title: name });
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-    }
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: name });
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
+  inp('#export').onclick = async () => { if (await exportBackup()) render(); };
   inp('#import').onclick = () => inp('#import-file').click();
   inp('#import-file').onchange = async (e) => {
     const f = e.target.files[0];

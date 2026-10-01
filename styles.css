@@ -1,3 +1,9 @@
+/* Display fonts, served from this site so no visitor data goes to a font service (licenses in fonts/). */
+@font-face { font-family: 'Orbitron'; font-weight: 400 900; font-display: swap; src: url(fonts/orbitron.woff2) format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 500; font-display: swap; src: url(fonts/rajdhani-500.woff2) format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 600; font-display: swap; src: url(fonts/rajdhani-600.woff2) format('woff2'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 700; font-display: swap; src: url(fonts/rajdhani-700.woff2) format('woff2'); }
+
 :root {
   --page: #07060f;
   --surface: #0e0c1d;
@@ -520,3 +526,9 @@ input:focus, select:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var
 @media (prefers-reduced-motion: reduce) {
   .set-row.just, .wk-rest.ending .t, .wk-mini .dot { animation: none; }
 }
+
+/* ---------- about & backup reminder ---------- */
+.about p { font-size: 13px; color: var(--ink-2); margin: 8px 0; }
+.about a:not(.btn) { color: var(--cyan); }
+.about .btn { margin-top: 8px; text-decoration: none; color: var(--ink); }
+.backup-nag { margin-top: 12px; border-left-color: var(--accent); background: rgba(255, 43, 214, .07); }

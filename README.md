@@ -11,7 +11,15 @@ A macro tracker and workout log built as an installable web app (PWA). No build 
 - **Recipes**: build a batch from weighed ingredients under My foods, then log it by the gram (soup) or by the piece (egg cups).
 - **Sharing**: send any food or recipe in My foods as a link. The food is packed into the link itself, so nothing is uploaded; the other person opens it or pastes it under My foods → Import.
 - **Workouts**: a logger with a built-in exercise library (plus your own exercises), routines, supersets and a rest timer. Each set shows what you did last time, and finishing a routine can update it with today's weights. Tracks weight × reps, reps only, or time, in lb or kg (Goals → Workouts).
-- Data lives in `localStorage` on the device. Back it up with Goals → Export.
+- Data lives in `localStorage` on the device. Back it up with Goals → Export. The Diary nudges you if 30 days pass without a backup.
+
+## Privacy and disclaimer
+
+Ironbyte has no accounts and no server: nothing you log leaves your device. Food searches go to USDA FoodData Central and barcode lookups to Open Food Facts; fonts are served from this site.
+
+Nutrition data comes from public databases and may be inaccurate. Ironbyte is a tracking tool, not medical advice. Talk to a professional before big changes to your diet or training, and lift at your own risk.
+
+Feedback and bugs: email ironbyte.change016 at passmail.net (Goals → Send feedback in the app), or [open an issue](https://github.com/laurenmtech/ironbyte/issues/new).
 
 ## Run locally
 
@@ -25,3 +33,5 @@ Home-screen install and the camera need HTTPS, so use the hosted copy on a phone
     python3 scripts/build-icons.py
 
 After changing any app file, bump `CACHE` in `sw.js` so installed copies pick up the update.
+
+The Orbitron and Rajdhani fonts in `fonts/` are under the SIL Open Font License (license files alongside).
